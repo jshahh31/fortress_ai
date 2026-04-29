@@ -8,10 +8,10 @@ import AuditFeed from "@/components/AuditFeed";
 import { AgentNode } from "@/types";
 
 const INITIAL_NODES: AgentNode[] = [
-  { id: "ext", name: "Extraction", model: "Qwen 2.5 72B", status: "idle", icon: "FileSearch" },
-  { id: "res", name: "Research", model: "Gemma 4", status: "idle", icon: "BookOpen" },
-  { id: "rsk", name: "Risk Analysis", model: "Qwen 2.5 72B", status: "idle", icon: "ShieldAlert" },
-  { id: "rep", name: "Final Report", model: "Gemma 4", status: "idle", icon: "FileText" },
+  { id: "ext", name: "Extraction", model: "Qwen 3.6 35B", status: "idle", icon: "FileSearch" },
+  { id: "res", name: "Research", model: "Gemma 4 4B", status: "idle", icon: "BookOpen" },
+  { id: "rsk", name: "Risk Analysis", model: "Qwen 3.6 35B", status: "idle", icon: "ShieldAlert" },
+  { id: "rep", name: "Final Report", model: "Gemma 4 4B", status: "idle", icon: "FileText" },
 ];
 
 export default function Dashboard() {

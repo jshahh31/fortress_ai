@@ -12,8 +12,8 @@
 ## 🚀 Key Features
 
 - **Multi-Agent Pipeline**: Orchestrated via LangGraph, utilizing specialized LLMs:
-    - **Qwen 2.5 (72B)**: High-precision extraction and rigorous legal risk analysis.
-    - **Gemma 4**: Deep legal research and professional report synthesis.
+    - **Qwen 3.6 (35B)**: High-precision extraction and rigorous legal risk analysis.
+    - **Gemma 4 (4B)**: Deep legal research and professional report synthesis.
 - **Hardware-Aware Design**: Built for ROCm 7.x, with real-time VRAM and temperature monitoring for AMD MI300X clusters.
 - **High-Density RAG**: Integrated **Qdrant** vector database using `BAAI/bge-m3` embeddings for multilingual legal context.
 - **Modern UI/UX**: A "Cyber-Secure Professional" dashboard built with Next.js 15, Tailwind v4, and Framer Motion.

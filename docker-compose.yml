@@ -16,7 +16,7 @@ services:
       - "8000:8000"
     env_file:
       - .env
-    command: --model Qwen/Qwen2.5-72B-Instruct --port 8000 --tensor-parallel-size 4  # Upgraded to 72B model for legal precision
+    command: --model Qwen/Qwen2.5-32B-Instruct --port 8000 --tensor-parallel-size 2
     devices:
       - /dev/kfd
       - /dev/dri
@@ -30,7 +30,7 @@ services:
       - "8001:8000"
     env_file:
       - .env
-    command: --model google/gemma-4b-it --port 8000 --tensor-parallel-size 2
+    command: --model google/gemma-2-2b-it --port 8000 --tensor-parallel-size 1
     devices:
       - /dev/kfd
       - /dev/dri
