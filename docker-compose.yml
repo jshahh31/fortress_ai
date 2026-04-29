@@ -16,7 +16,7 @@ services:
       - "8000:8000"
     env_file:
       - .env
-    command: --model Qwen/Qwen2.5-32B-Instruct --port 8000 --tensor-parallel-size 2  # Adjusted model to match Qwen recommendation, distributed across GPUs
+    command: --model Qwen/Qwen2.5-72B-Instruct --port 8000 --tensor-parallel-size 4  # Upgraded to 72B model for legal precision
     devices:
       - /dev/kfd
       - /dev/dri

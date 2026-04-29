@@ -23,13 +23,13 @@ export default function AuditFeed() {
     setIsProcessing(true);
     
     const mockChunks = [
-      "\n[GPU 0 — Qwen 3.6] Extraction Node Triggered...",
+      "\n[GPU 0 — Qwen 72B] Extraction Node Triggered...",
       "Found 14 clauses. Extracting entities...",
       "Done.",
       "\n[GPU 1 — Gemma 4] Research Node Triggered...",
       "Querying Qdrant index (legal_documents) via bge-m3...",
       "Found 3 relevant precedents.",
-      "\n[GPU 0 — Qwen 3.6] Risk Analysis...",
+      "\n[GPU 0 — Qwen 72B] Risk Analysis...",
       "Evaluating indemnification liabilities...",
       "Warning: Uncapped liability detected in Section 4.2.",
       "\n[GPU 1 — Gemma 4] Compiling Final Report...\n",

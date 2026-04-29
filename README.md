@@ -12,7 +12,7 @@
 ## 🚀 Key Features
 
 - **Multi-Agent Pipeline**: Orchestrated via LangGraph, utilizing specialized LLMs:
-    - **Qwen 2.5 (35B)**: Precision extraction and rigorous risk analysis.
+    - **Qwen 2.5 (72B)**: High-precision extraction and rigorous legal risk analysis.
     - **Gemma 4**: Deep legal research and professional report synthesis.
 - **Hardware-Aware Design**: Built for ROCm 7.x, with real-time VRAM and temperature monitoring for AMD MI300X clusters.
 - **High-Density RAG**: Integrated **Qdrant** vector database using `BAAI/bge-m3` embeddings for multilingual legal context.
@@ -46,32 +46,6 @@ The system follows a 4-node "Chain of Thought" pipeline:
 3.  ⚠️ **Risk Node**: (Qwen) Identifies liabilities and calculates compliance scores.
 4.  📝 **Reporter Node**: (Gemma) Streams a final, human-readable audit report.
 
----
-
-## ⚙️ Installation & Setup
-
-### Prerequisites
-- AMD MI300X Server (or compatible ROCm hardware)
-- Docker & Docker Compose
-- Hugging Face Token (for model access)
-
-### 1. Configure Environment
-Create a `.env` file in the root directory (refer to `.env` for placeholders).
-```env
-HF_TOKEN=your_token_here
-```
-
-### 2. Launch with Docker
-```bash
-docker-compose up --build -d
-```
-
-### 3. Start Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
 
 ---
 

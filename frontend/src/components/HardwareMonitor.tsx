@@ -54,7 +54,7 @@ export default function HardwareMonitor() {
       <div className="flex items-center justify-between text-xs border-t border-slate-800/50 pt-3">
         <div className="flex flex-col gap-1">
           <span className="text-slate-500 uppercase tracking-wider text-[10px]">Active Core</span>
-          <span className="text-slate-300 font-medium">GPU 0 - Qwen 3.6</span>
+          <span className="text-slate-300 font-medium">GPU 0 - Qwen 72B</span>
         </div>
         <div className="flex flex-col gap-1 items-end">
           <span className="text-slate-500 uppercase tracking-wider text-[10px]">Temp</span>
