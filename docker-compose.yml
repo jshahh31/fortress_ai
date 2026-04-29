@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: always
+
+  vllm-qwen:
+    image: rocm/vllm:rocm6.0_ubuntu20.04_py3.9_vllm0.3.0  # Update with latest compatible ROCm 7.x image tag when available
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    command: --model Qwen/Qwen2.5-32B-Instruct --port 8000 --tensor-parallel-size 2  # Adjusted model to match Qwen recommendation, distributed across GPUs
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+    ipc: host
+
+  vllm-gemma:
+    image: rocm/vllm:rocm6.0_ubuntu20.04_py3.9_vllm0.3.0  # Update with latest compatible ROCm 7.x image tag when available
+    ports:
+      - "8001:8000"
+    env_file:
+      - .env
+    command: --model google/gemma-4b-it --port 8000 --tensor-parallel-size 2
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+    ipc: host
+
+  backend:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - qdrant
+      - vllm-qwen
+      - vllm-gemma
+    volumes:
+      - ./app:/app/app
+
+volumes:
+  qdrant_data:
