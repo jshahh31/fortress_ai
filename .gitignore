@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+ENV/
+
+# Node
+node_modules/
+.next/
+dist/
+build/
+.DS_Store
+
+# Git
+.git/
+index.lock
+
+# Docker
+.docker/
