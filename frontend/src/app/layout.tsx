@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
-import { Inter_Tight } from "next/font/google";
+import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
 
-const interTight = Inter_Tight({
-  variable: "--font-inter-tight",
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
+  subsets: ["latin"],
+});
+
+const jetbrains = JetBrains_Mono({
+  variable: "--font-jetbrains",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "Fortress AI | Legal Audit",
-  description: "Private Multi-Agent Legal Audit System",
+  title: "Fortress AI | Contract Risk Assessment",
+  description: "AI-powered contract risk assessment for attorneys and individuals. Upload any contract, get a professional risk report in seconds.",
 };
 
 export default function RootLayout({
@@ -21,13 +25,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`dark ${interTight.variable} h-full antialiased`}
+      className={`${jakarta.variable} ${jetbrains.variable} h-full antialiased`}
     >
-      <body className="flex h-full min-h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-slate-950/50">
-          {children}
-        </main>
+      <body className="h-full min-h-screen font-sans bg-background text-foreground">
+        {children}
       </body>
     </html>
   );
