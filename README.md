@@ -47,24 +47,5 @@ The system follows a 4-node "Chain of Thought" pipeline:
 4.  📝 **Reporter Node**: (Gemma) Streams a final, human-readable audit report.
 
 
----
-
-## 📂 Project Structure
-
-```text
-├── app/                  # FastAPI Backend
-│   ├── agents/           # LangGraph Orchestration
-│   ├── core/             # Configuration & vLLM Clients
-│   ├── db/               # Qdrant Vector DB Logic
-│   └── schemas/          # Pydantic Models
-├── frontend/             # Next.js Dashboard
-│   ├── src/app/          # Pages & Layout
-│   └── src/components/   # Dashboard Widgets
-├── docker-compose.yml    # Full stack orchestration
-└── requirements.txt      # Python dependencies
-```
-
----
-
 ## 🛡 License
 Private / Proprietary — All rights reserved.
