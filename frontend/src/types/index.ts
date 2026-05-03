@@ -130,6 +130,7 @@ export interface Conversation {
   contractType?: ContractType;
   userType?: UserType;
   verdict?: ReportVerdict;
+  isPinned?: boolean;
 }
 
 // ─── Attached Files Panel ──────────────────────────────────

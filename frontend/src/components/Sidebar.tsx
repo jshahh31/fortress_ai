@@ -4,11 +4,12 @@ import {
   ShieldCheck,
   MessageSquarePlus,
   Clock,
-  Trash2,
   Settings,
   FileText,
+  PanelLeft,
 } from "lucide-react";
 import { Conversation, CONTRACT_TYPE_LABELS } from "@/types";
+import ChatActionsMenu from "./ChatActionsMenu";
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -16,6 +17,9 @@ interface SidebarProps {
   onNewChat: () => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
+  onRenameConversation?: (id: string, name: string) => void;
+  onPinConversation?: (id: string) => void;
+  onToggleSidebar?: () => void;
 }
 
 const VERDICT_DOT: Record<string, string> = {
@@ -31,17 +35,31 @@ export default function Sidebar({
   onNewChat,
   onSelectConversation,
   onDeleteConversation,
+  onRenameConversation,
+  onPinConversation,
+  onToggleSidebar,
 }: SidebarProps) {
   return (
     <aside className="w-72 border-r border-white/10 bg-surface/80 backdrop-blur-2xl flex flex-col hidden md:flex z-20 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
       {/* Brand */}
-      <div className="h-16 flex items-center px-6 border-b border-white/10 shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mr-3 border border-primary/20 shadow-[0_0_10px_rgba(24,86,255,0.15)]">
-          <ShieldCheck className="w-5 h-5 text-primary" />
+      <div className="h-16 flex items-center justify-between px-4 shrink-0">
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mr-3 border border-primary/20 shadow-[0_0_10px_rgba(24,86,255,0.15)]">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+          </div>
+          <span className="font-bold text-lg tracking-wide text-secondary">
+            FORTRESS AI
+          </span>
         </div>
-        <span className="font-bold text-lg tracking-wide text-secondary">
-          FORTRESS AI
-        </span>
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="p-1.5 rounded-md hover:bg-white/5 text-muted-foreground transition-colors"
+            title="Hide Sidebar (⌘B)"
+          >
+            <PanelLeft className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* New Analysis Button */}
@@ -72,10 +90,10 @@ export default function Sidebar({
             const isActive = conv.id === activeConversationId;
             const verdictDot = conv.verdict ? VERDICT_DOT[conv.verdict] : null;
             return (
-              <button
+              <div
                 key={conv.id}
                 onClick={() => onSelectConversation(conv.id)}
-                className={`w-full text-left flex items-start gap-3 px-3 py-3 rounded-xl transition-all duration-200 group relative ${
+                className={`w-full cursor-pointer text-left flex items-start gap-3 px-3 py-3 rounded-xl transition-all duration-200 group relative ${
                   isActive
                     ? "bg-white/10 border border-white/20 shadow-sm"
                     : "border border-transparent hover:bg-white/5"
@@ -107,17 +125,15 @@ export default function Sidebar({
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteConversation(conv.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-danger/10 hover:text-danger text-muted-foreground shrink-0"
-                  aria-label="Delete conversation"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </button>
+                <ChatActionsMenu
+                  chatId={conv.id}
+                  chatName={conv.title}
+                  isPinned={conv.isPinned}
+                  onDelete={onDeleteConversation}
+                  onRename={onRenameConversation}
+                  onPin={onPinConversation}
+                />
+              </div>
             );
           })
         )}
