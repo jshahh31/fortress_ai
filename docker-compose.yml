@@ -10,8 +10,20 @@ services:
       - qdrant_data:/qdrant/storage
     restart: always
 
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: fortress
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
   vllm-qwen:
-    image: rocm/vllm:rocm6.0_ubuntu20.04_py3.9_vllm0.3.0  # Update with latest compatible ROCm 7.x image tag when available
+    image: rocm/vllm:rocm6.0_ubuntu20.04_py3.9_vllm0.3.0 # Update with latest compatible ROCm 7.x image tag when available
     ports:
       - "8000:8000"
     env_file:
@@ -25,7 +37,7 @@ services:
     ipc: host
 
   vllm-gemma:
-    image: rocm/vllm:rocm6.0_ubuntu20.04_py3.9_vllm0.3.0  # Update with latest compatible ROCm 7.x image tag when available
+    image: rocm/vllm:rocm6.0_ubuntu20.04_py3.9_vllm0.3.0 # Update with latest compatible ROCm 7.x image tag when available
     ports:
       - "8001:8000"
     env_file:
@@ -44,12 +56,19 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    environment:
+      # Override localhost URLs with Docker service hostnames
+      DATABASE_URL: postgresql://postgres:postgrespassword@db:5432/fortress?schema=public
+      QDRANT_URL: http://qdrant:6333
     depends_on:
-      - qdrant
-      - vllm-qwen
-      - vllm-gemma
+      db:
+        condition: service_started
+      qdrant:
+        condition: service_started
     volumes:
       - ./app:/app/app
+    restart: on-failure
 
 volumes:
   qdrant_data:
+  postgres_data:

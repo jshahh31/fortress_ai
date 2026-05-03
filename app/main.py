@@ -1,78 +1,93 @@
-import asyncio
-import json
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
-from app.db.qdrant import init_qdrant
-from app.agents.graph import app_graph, gemma_llm, AuditState
-from app.schemas.document import AuditRequest
-from langchain_core.messages import HumanMessage, SystemMessage
+"""
+Fortress AI — Private Multi-Agent Legal Audit System.
 
-app = FastAPI(title="Fortress AI", description="Private Multi-Agent Legal Audit System")
+FastAPI backend serving the Next.js frontend.
+"""
 
-@app.on_event("startup")
-async def startup_event():
-    # Initialize Qdrant collection on startup
-    await init_qdrant()
+import logging
+from contextlib import asynccontextmanager
 
-@app.post("/audit")
-async def run_audit(request: AuditRequest):
-    """Runs the full async LangGraph workflow."""
-    initial_state = AuditState(
-        document_id=request.document_id,
-        text=request.text,
-        extracted_data={},
-        research_findings=[],
-        risk_assessment={},
-        final_report="",
-        gpu_id=""
-    )
-    
-    # Run the graph asynchronously
-    final_state = await app_graph.ainvoke(initial_state)
-    return final_state
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-@app.post("/audit/stream")
-async def stream_audit_report(request: AuditRequest):
-    """
-    Runs the graph up to Risk, then streams the final report from the Reporter node using Gemma.
-    Demonstrates word-by-word streaming for the UI.
-    """
-    initial_state = AuditState(
-        document_id=request.document_id,
-        text=request.text,
-        extracted_data={},
-        research_findings=[],
-        risk_assessment={},
-        final_report="",
-        gpu_id=""
-    )
-    
-    # We could stream from the graph directly, but for clarity and simplicity in this boilerplate, 
-    # we'll execute up to risk manually or run the whole graph and just stream the last part.
-    # To properly stream the LLM in LangGraph, you yield from astream_events.
-    # Here, we will just stream the gemma response directly for the reporter phase.
-    
-    async def report_generator():
-        # First, run the graph async to get the pre-requisite state
-        state = await app_graph.ainvoke(initial_state)
-        
-        yield "data: {\"status\": \"Extraction, Research, Risk completed. Generating Report...\"}\n\n"
-        
-        messages = [
-            SystemMessage(content="You are a senior legal reporter. Write a professional audit report based on the findings."),
-            HumanMessage(content=f"Extracted: {state['extracted_data']}\nRisk: {state['risk_assessment']}")
-        ]
-        
-        # Stream the response word-by-word from Gemma
-        async for chunk in gemma_llm.astream(messages):
-            if chunk.content:
-                # SSE format
-                yield f"data: {json.dumps({'chunk': chunk.content, 'gpu_id': 'GPU 1 (Gemma)'})}\n\n"
-        
-        yield "data: [DONE]\n\n"
-        
-    return StreamingResponse(report_generator(), media_type="text/event-stream")
+from app.core.config import settings
+from app.routes import health, conversations, chat, datasets
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+# ── Logging ──────────────────────────────────────────────────
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s │ %(levelname)-7s │ %(name)s │ %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+
+from app.db.store import store
+
+# ── Lifespan ─────────────────────────────────────────────────
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🏰 Fortress AI backend starting...")
+    logger.info(f"   Qwen model:  {settings.QWEN_MODEL}")
+    logger.info(f"   Kimi model:  {settings.KIMI_MODEL}")
+    logger.info(f"   Fireworks:   {settings.FIREWORKS_URL}")
+    logger.info(f"   CORS origin: {settings.FRONTEND_URL}")
+
+    # Ensure upload directory exists
+    settings.upload_path  # triggers mkdir
+
+    # Connect to database
+    await store.connect()
+    logger.info("🔌 Connected to PostgreSQL database")
+
+    yield
+
+    # Disconnect from database
+    await store.disconnect()
+    logger.info("🔌 Disconnected from PostgreSQL database")
+    logger.info("🏰 Fortress AI backend shutting down.")
+
+
+# ── App ──────────────────────────────────────────────────────
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    description="Private Multi-Agent Legal Contract Risk Assessment System",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# ── CORS (allow Next.js frontend) ────────────────────────────
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        settings.FRONTEND_URL,
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── Routes ───────────────────────────────────────────────────
+
+app.include_router(health.router)
+app.include_router(conversations.router)
+app.include_router(chat.router)
+app.include_router(datasets.router)
+
+
+# ── Root ─────────────────────────────────────────────────────
+
+@app.get("/")
+async def root():
+    return {
+        "name": settings.PROJECT_NAME,
+        "version": "1.0.0",
+        "status": "running",
+        "docs": "/docs",
+    }

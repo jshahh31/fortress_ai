@@ -1,10 +1,30 @@
+# ─── Core ────────────────────────────────────────────────────
 fastapi>=0.109.0
 uvicorn>=0.27.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
-langchain>=0.1.0
-langgraph>=0.0.21
-qdrant-client>=1.7.0
+
+# ─── LLM (OpenAI-compatible client for Fireworks AI) ────────
 openai>=1.10.0
+
+# ─── SSE Streaming ──────────────────────────────────────────
 sse-starlette>=2.0.0
-asyncio
+
+# ─── File Uploads ───────────────────────────────────────────
+python-multipart>=0.0.6
+
+# ─── Document Parsing ──────────────────────────────────────
+PyPDF2>=3.0.0
+python-docx>=1.0.0
+
+# ─── Vector DB (RAG) ───────────────────────────────────────
+qdrant-client>=1.7.0
+fastembed>=0.2.0
+
+# ─── Data Science & Datasets ───────────────────────────────
+datasets>=2.16.0
+pandas>=2.1.0
+pdfplumber>=0.11.0
+
+# ─── Database ────────────────────────────────────────────────
+prisma==0.13.1

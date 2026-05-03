@@ -1,0 +1,30 @@
+# Frontend (built separately)
+frontend/node_modules
+frontend/.next
+frontend/.env.local
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+env
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+
+# Docker
+docker-compose.yml
+
+# Misc
+*.md
+.antigravity
+scratch
+uploads
+.env.local

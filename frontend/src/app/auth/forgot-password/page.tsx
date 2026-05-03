@@ -2,20 +2,34 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Mail, Loader2, CheckCircle } from "lucide-react";
+import { Mail, Loader2, CheckCircle, ArrowLeft } from "lucide-react";
+import { useSignIn } from "@clerk/nextjs";
 
 export default function ForgotPasswordPage() {
+  const { isLoaded, signIn } = useSignIn();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLoaded || !email) return;
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setError("");
+
+    try {
+      await signIn.create({
+        strategy: "reset_password_email_code",
+        identifier: email,
+      });
       setSent(true);
-    }, 1200);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.errors?.[0]?.message || "Failed to send reset email. Please check the address.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (sent) {
@@ -26,12 +40,21 @@ export default function ForgotPasswordPage() {
         </div>
         <h1 className="text-2xl font-extrabold text-secondary mb-2">Check your email</h1>
         <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
-          We&apos;ve sent a password reset link to <span className="text-secondary font-medium">{email}</span>.
-          Please check your inbox and follow the instructions.
+          We&apos;ve sent a password reset code to{" "}
+          <span className="text-secondary font-medium">{email}</span>.
+          Please check your inbox and enter the code on the next page.
         </p>
-        <Link href="/auth/login" className="text-sm text-blue-300 hover:text-blue-200 font-semibold transition-colors">
-          ← Back to Sign In
+        <Link
+          href={`/auth/reset-password?email=${encodeURIComponent(email)}`}
+          className="w-full inline-block bg-[#1B3A5C] hover:bg-[#234a72] text-white font-bold text-sm py-3 rounded-xl border border-[#1B3A5C]/60 shadow-lg shadow-[#1B3A5C]/20 transition-all text-center"
+        >
+          Enter Reset Code →
         </Link>
+        <p className="text-center text-xs text-muted-foreground mt-4">
+          <Link href="/auth/login" className="text-blue-300 hover:text-blue-200 font-semibold transition-colors">
+            ← Back to Sign In
+          </Link>
+        </p>
       </div>
     );
   }
@@ -40,29 +63,49 @@ export default function ForgotPasswordPage() {
     <div className="glass-panel rounded-2xl p-8 border-[#1B3A5C]/30">
       <div className="text-center mb-8">
         <h1 className="text-2xl font-extrabold text-secondary mb-1">Forgot password?</h1>
-        <p className="text-sm text-muted-foreground">Enter your email and we&apos;ll send you a reset link</p>
+        <p className="text-sm text-muted-foreground">
+          Enter your email and we&apos;ll send you a reset code
+        </p>
       </div>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/50 text-red-400 text-sm p-3 rounded-xl mb-4">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider block mb-1.5">Email</label>
+          <label className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider block mb-1.5">
+            Email
+          </label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required
-              className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-secondary placeholder:text-muted-foreground focus:outline-none focus:border-[#1B3A5C]/60 transition-all" />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+              autoFocus
+              className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-secondary placeholder:text-muted-foreground focus:outline-none focus:border-[#1B3A5C]/60 focus:shadow-[0_0_10px_rgba(27,58,92,0.2)] transition-all"
+            />
           </div>
         </div>
 
-        <button type="submit" disabled={loading || !email}
-          className="w-full bg-[#1B3A5C] hover:bg-[#234a72] text-white font-bold text-sm py-3 rounded-xl border border-[#1B3A5C]/60 shadow-lg shadow-[#1B3A5C]/20 transition-all disabled:opacity-40 flex items-center justify-center gap-2">
+        <button
+          type="submit"
+          disabled={loading || !email || !isLoaded}
+          className="w-full bg-[#1B3A5C] hover:bg-[#234a72] text-white font-bold text-sm py-3 rounded-xl border border-[#1B3A5C]/60 shadow-lg shadow-[#1B3A5C]/20 transition-all active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2"
+        >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          {loading ? "Sending..." : "Send Reset Link"}
+          {loading ? "Sending..." : "Send Reset Code"}
         </button>
       </form>
 
       <p className="text-center text-xs text-muted-foreground mt-6">
-        <Link href="/auth/login" className="text-blue-300 hover:text-blue-200 font-semibold transition-colors">
-          ← Back to Sign In
+        <Link href="/auth/login" className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200 font-semibold transition-colors">
+          <ArrowLeft className="w-3 h-3" /> Back to Sign In
         </Link>
       </p>
     </div>
