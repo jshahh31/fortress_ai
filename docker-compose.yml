@@ -1,15 +1,6 @@
 version: '3.8'
 
 services:
-  qdrant:
-    image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    restart: always
-
   db:
     image: postgres:15-alpine
     environment:
@@ -59,16 +50,48 @@ services:
     environment:
       # Override localhost URLs with Docker service hostnames
       DATABASE_URL: postgresql://postgres:postgrespassword@db:5432/fortress?schema=public
+      REDIS_URL: redis://redis:6379/0
+      # Route local SSH tunnels through host.docker.internal
+      QWEN_API_BASE: http://host.docker.internal:8001/v1
+      GEMMA_API_BASE: http://host.docker.internal:8002/v1
       QDRANT_URL: http://qdrant:6333
     depends_on:
       db:
         condition: service_started
-      qdrant:
+      redis:
+        condition: service_started
+    volumes:
+      - ./app:/app/app
+    restart: on-failure
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  celery-worker:
+    build: .
+    command: celery -A app.worker.celery_app worker --concurrency=1 --loglevel=info
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgrespassword@db:5432/fortress?schema=public
+      REDIS_URL: redis://redis:6379/0
+      QWEN_API_BASE: http://host.docker.internal:8001/v1
+      GEMMA_API_BASE: http://host.docker.internal:8002/v1
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      redis:
+        condition: service_started
+      db:
         condition: service_started
     volumes:
       - ./app:/app/app
     restart: on-failure
 
 volumes:
-  qdrant_data:
   postgres_data:
+  redis_data:

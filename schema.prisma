@@ -15,6 +15,7 @@ model User {
   passwordHash  String?
   createdAt     DateTime       @default(now())
   conversations Conversation[]
+  documentTasks DocumentTask[]
 }
 
 model Conversation {
@@ -53,4 +54,20 @@ model Attachment {
 
   messageId String   @unique
   message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+model DocumentTask {
+  id            String   @id @default(uuid())
+  filename      String
+  status        String   // "pending", "processing", "completed", "failed", "cancelled"
+  progress      Int      @default(0)
+  verdict       String?
+  riskScore     Int?
+  finalReport   String?
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
 }

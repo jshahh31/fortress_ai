@@ -6,17 +6,22 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Fortress AI"
     FRONTEND_URL: str = "http://localhost:3000"
 
-    # ── Fireworks AI ──────────────────────────────────────────
-    FIREWORKS_URL: str = "https://api.fireworks.ai/inference/v1"
-    FIREWORKS_API_KEY: str = ""
+    # ── Local AI Models (SSH Tunnel) ──────────────────────────
+    QWEN_API_BASE: str = "http://localhost:8001/v1"
+    QWEN_MODEL: str = "Qwen/Qwen3.6-27B" 
 
-    QWEN_MODEL: str = "accounts/fireworks/models/qwen3p6-plus"
-    KIMI_MODEL: str = "accounts/fireworks/models/kimi-k2p5"
+    GEMMA_API_BASE: str = "http://localhost:8002/v1"
+    GEMMA_MODEL: str = "google/gemma-4-E4B"
+
+    LOCAL_API_KEY: str = "dummy-key"
 
     # ── Qdrant (future RAG) ──────────────────────────────────
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION: str = "legal_documents"
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
+
+    # ── Redis & Celery ────────────────────────────────────────
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     # ── File uploads ──────────────────────────────────────────
     UPLOAD_DIR: str = "./uploads"

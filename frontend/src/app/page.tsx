@@ -58,7 +58,7 @@ export default function LandingPage() {
       <Header />
       <main className="flex-1 pt-16">
         {/* ─── HERO ──────────────────────────────────── */}
-        <section className="relative py-24 md:py-36 overflow-hidden">
+        <section className="relative min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 text-center relative z-10">
             <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={0}
               className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-8">

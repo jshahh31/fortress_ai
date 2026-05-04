@@ -17,16 +17,16 @@ class AuditState(TypedDict):
 
 # Initialize the LLMs pointing to the vLLM endpoints
 qwen_llm = ChatOpenAI(
-    model=settings.QWEN_MODEL_NAME,
-    openai_api_key=settings.VLLM_API_KEY,
-    openai_api_base=settings.VLLM_QWEN_URL,
+    model=settings.QWEN_MODEL,
+    openai_api_key=settings.LOCAL_API_KEY,
+    openai_api_base=settings.QWEN_API_BASE,
     max_tokens=4096,
 )
 
 gemma_llm = ChatOpenAI(
-    model=settings.GEMMA_MODEL_NAME,
-    openai_api_key=settings.VLLM_API_KEY,
-    openai_api_base=settings.VLLM_GEMMA_URL,
+    model=settings.GEMMA_MODEL,
+    openai_api_key=settings.LOCAL_API_KEY,
+    openai_api_base=settings.GEMMA_API_BASE,
     max_tokens=4096,
 )
 

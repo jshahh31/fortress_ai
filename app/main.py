@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routes import health, conversations, chat, datasets
+from app.routes import health, conversations, chat, datasets, documents, ws
 
 # ── Logging ──────────────────────────────────────────────────
 
@@ -30,10 +30,9 @@ from app.db.store import store
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🏰 Fortress AI backend starting...")
-    logger.info(f"   Qwen model:  {settings.QWEN_MODEL}")
-    logger.info(f"   Kimi model:  {settings.KIMI_MODEL}")
-    logger.info(f"   Fireworks:   {settings.FIREWORKS_URL}")
-    logger.info(f"   CORS origin: {settings.FRONTEND_URL}")
+    logger.info(f"   Qwen endpoint:  {settings.QWEN_API_BASE} ({settings.QWEN_MODEL})")
+    logger.info(f"   Gemma endpoint: {settings.GEMMA_API_BASE} ({settings.GEMMA_MODEL})")
+    logger.info(f"   CORS origin:    {settings.FRONTEND_URL}")
 
     # Ensure upload directory exists
     settings.upload_path  # triggers mkdir
@@ -79,6 +78,8 @@ app.include_router(health.router)
 app.include_router(conversations.router)
 app.include_router(chat.router)
 app.include_router(datasets.router)
+app.include_router(documents.router)
+app.include_router(ws.router)
 
 
 # ── Root ─────────────────────────────────────────────────────

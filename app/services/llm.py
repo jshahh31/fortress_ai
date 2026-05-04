@@ -1,8 +1,8 @@
 """
-LLM Service — Fireworks AI integration for Qwen 3.6+ and Kimi K2.5.
+LLM Service — Local inference via SSH Tunnel (Qwen and Gemma).
 
 Uses the OpenAI-compatible chat completions API.
-Both models are accessed through the same Fireworks endpoint; only the model name differs.
+Models are accessed through their respective local endpoints.
 """
 
 from __future__ import annotations
@@ -20,31 +20,40 @@ logger = logging.getLogger(__name__)
 
 class ModelRole(str, Enum):
     """Which model to use for a given task."""
-    # Qwen 3.6+ — strong at structured extraction, risk analysis, JSON output
+    # Qwen 27B — strong at structured extraction, risk analysis, complex coding, bilingual
     PRIMARY = "primary"
-    # Kimi K2.5 — strong at synthesis, report writing, conversational responses
+    # Gemma 4B/9B — strong at synthesis, report writing, creative reasoning, strict logic
     SECONDARY = "secondary"
 
 
-# ── Fireworks client (OpenAI-compatible) ─────────────────────
+# ── Local clients (OpenAI-compatible) ────────────────────────
 
-_client: Optional[AsyncOpenAI] = None
+_qwen_client: Optional[AsyncOpenAI] = None
+_gemma_client: Optional[AsyncOpenAI] = None
 
 
-def _get_client() -> AsyncOpenAI:
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(
-            api_key=settings.FIREWORKS_API_KEY,
-            base_url=settings.FIREWORKS_URL,
-        )
-    return _client
+def _get_client(role: ModelRole) -> AsyncOpenAI:
+    global _qwen_client, _gemma_client
+    if role == ModelRole.PRIMARY:
+        if _qwen_client is None:
+            _qwen_client = AsyncOpenAI(
+                api_key=settings.LOCAL_API_KEY,
+                base_url=settings.QWEN_API_BASE,
+            )
+        return _qwen_client
+    else:
+        if _gemma_client is None:
+            _gemma_client = AsyncOpenAI(
+                api_key=settings.LOCAL_API_KEY,
+                base_url=settings.GEMMA_API_BASE,
+            )
+        return _gemma_client
 
 
 def _get_model_name(role: ModelRole) -> str:
     if role == ModelRole.PRIMARY:
         return settings.QWEN_MODEL
-    return settings.KIMI_MODEL
+    return settings.GEMMA_MODEL
 
 
 # ─── Public API ──────────────────────────────────────────────
@@ -57,7 +66,7 @@ async def generate(
     max_tokens: int = 4096,
 ) -> str:
     """Generate a complete response from the LLM (non-streaming)."""
-    client = _get_client()
+    client = _get_client(role)
     model = _get_model_name(role)
 
     messages: List[Dict[str, Any]] = []
@@ -73,6 +82,9 @@ async def generate(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=False,
+        extra_body={
+            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>\\n'}}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\\n{% endif %}"
+        }
     )
 
     content = response.choices[0].message.content or ""
@@ -88,7 +100,7 @@ async def stream(
     max_tokens: int = 4096,
 ) -> AsyncGenerator[str, None]:
     """Stream response chunks from the LLM."""
-    client = _get_client()
+    client = _get_client(role)
     model = _get_model_name(role)
 
     messages: List[Dict[str, Any]] = []
@@ -104,6 +116,9 @@ async def stream(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=True,
+        extra_body={
+            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>\\n'}}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\\n{% endif %}"
+        }
     )
 
     async for chunk in response:
@@ -119,7 +134,7 @@ async def generate_with_history(
     max_tokens: int = 4096,
 ) -> str:
     """Generate with full conversation history (for multi-turn chat)."""
-    client = _get_client()
+    client = _get_client(role)
     model = _get_model_name(role)
 
     api_messages: List[Dict[str, Any]] = []
@@ -135,6 +150,9 @@ async def generate_with_history(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=False,
+        extra_body={
+            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>\\n'}}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\\n{% endif %}"
+        }
     )
 
     return response.choices[0].message.content or ""
@@ -148,7 +166,7 @@ async def stream_with_history(
     max_tokens: int = 4096,
 ) -> AsyncGenerator[str, None]:
     """Stream with full conversation history."""
-    client = _get_client()
+    client = _get_client(role)
     model = _get_model_name(role)
 
     api_messages: List[Dict[str, Any]] = []
@@ -164,6 +182,9 @@ async def stream_with_history(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=True,
+        extra_body={
+            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>\\n'}}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\\n{% endif %}"
+        }
     )
 
     async for chunk in response:
@@ -174,7 +195,7 @@ async def stream_with_history(
 async def check_connectivity() -> Dict[str, bool]:
     """Quick check if both models respond."""
     results = {}
-    for role_name, role in [("qwen", ModelRole.PRIMARY), ("kimi", ModelRole.SECONDARY)]:
+    for role_name, role in [("qwen", ModelRole.PRIMARY), ("gemma", ModelRole.SECONDARY)]:
         try:
             resp = await generate("Say OK", role=role, max_tokens=5)
             results[role_name] = len(resp) > 0
