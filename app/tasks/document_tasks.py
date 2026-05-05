@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 async def process_document_async(task_id: str, file_path: str, user_id: str):
     try:
-        # Step 1: Parsing & Extraction with Gemma (Secondary model)
+        # Step 1: Parsing & Extraction with Qwen
         sync_publish_progress(task_id, user_id, {"status": "processing", "step": "parsing", "progress": 10})
         
         # Read file (simplified, assume plain text for now, but should handle pdf/docx later)
@@ -25,7 +25,7 @@ async def process_document_async(task_id: str, file_path: str, user_id: str):
             prompt=f"Extract clauses:\n\n{parsed}",
         )
 
-        # Step 2: Risk Assessment & Deep Analysis with Qwen (Primary model)
+        # Step 2: Risk Assessment & Deep Analysis
         sync_publish_progress(task_id, user_id, {"status": "processing", "step": "risk_assessment", "progress": 60})
         risk_analysis = await llm.generate(
             prompt=f"Assess risks:\n\n{extracted}",

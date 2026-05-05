@@ -18,10 +18,10 @@ function genId() {
 }
 
 const RISK_KEYWORDS: Record<InlineRowStatus, string[]> = {
-  critical: ["critical", "uncapped", "unlimited", "severe"],
-  high: ["high", "significant", "overbroad", "aggressive"],
-  medium: ["medium", "moderate", "unusual", "concern"],
-  low: ["low", "standard", "acceptable", "minor"],
+  critical: ["critical", "uncapped", "unlimited", "severe", "offline", "failed", "error"],
+  high: ["high", "significant", "overbroad", "aggressive", "down"],
+  medium: ["medium", "moderate", "unusual", "concern", "warning", "updating"],
+  low: ["low", "standard", "acceptable", "minor", "online", "working", "success", "active"],
 };
 
 function inferStatus(text: string): InlineRowStatus | undefined {
@@ -97,7 +97,6 @@ export function buildMdComponents(delay = 200): Components {
       const rows: InlineTableRow[] = acc.rows.map((r) => ({
         id: genId(),
         cells: r.cells,
-        status: inferStatus(r.raw),
         copyValue: r.raw,
       }));
 

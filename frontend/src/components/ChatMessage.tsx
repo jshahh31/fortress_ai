@@ -1,9 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Bot, User, FileText, Loader2, Download } from "lucide-react";
+import { Bot, User, FileText, Loader2, Download, Copy, ThumbsUp, ThumbsDown, Check } from "lucide-react";
+import { useState } from "react";
 import { Message } from "@/types";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import ReportView from "@/components/report/ReportView";
 import AnalysisProgress from "@/components/report/AnalysisProgress";
 import { CHAT_MD_COMPONENTS } from "@/lib/mdComponents";
@@ -20,6 +22,7 @@ export default function ChatMessage({ message, userType, onRequestExport }: Chat
   const isSystem = message.role === "system";
   const hasReport = !!message.report;
   const hasAnalysis = !!message.analysisSteps;
+  const [copied, setCopied] = useState(false);
 
   // System messages (confirmations, etc.)
   if (isSystem) {
@@ -30,7 +33,7 @@ export default function ChatMessage({ message, userType, onRequestExport }: Chat
         transition={{ duration: 0.25 }}
         className="flex justify-center py-3 px-4 md:px-8"
       >
-        <div className="max-w-md text-center px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
+        <div className="max-w-md text-center px-4 py-2 rounded-full border text-xs text-muted-foreground">
           {message.content}
         </div>
       </motion.div>
@@ -42,7 +45,7 @@ export default function ChatMessage({ message, userType, onRequestExport }: Chat
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className={`flex gap-4 py-5 px-4 md:px-8 ${
+      className={`flex gap-4 py-5 px-4 md:px-8 group ${
         isUser ? "justify-end" : "justify-start"
       }`}
     >
@@ -57,7 +60,7 @@ export default function ChatMessage({ message, userType, onRequestExport }: Chat
       <div className={`min-w-0 ${isUser ? "max-w-[75%]" : "max-w-[85%] flex-1"}`}>
         {/* Attachment badge */}
         {message.attachment && (
-          <div className="mb-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-medium text-muted-foreground">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-medium text-muted-foreground">
             {message.attachment.type === 'download' ? (
               <Download className="w-3.5 h-3.5 text-success" />
             ) : (
@@ -89,10 +92,10 @@ export default function ChatMessage({ message, userType, onRequestExport }: Chat
         {/* Regular text bubble */}
         {!hasReport && !hasAnalysis && (
           <div
-            className={`rounded-2xl px-5 py-3.5 text-sm leading-relaxed ${
+            className={`rounded-2xl px-5 py-3 text-sm leading-relaxed ${
               isUser
-                ? "bg-primary/80 text-white border border-primary/60 shadow-[0_4px_20px_rgba(24,86,255,0.2)] rounded-br-md"
-                : "bg-white/5 text-secondary border border-white/10 backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] rounded-bl-md"
+                ? "bg-[#292929] text-white border border-white/10 shadow-sm rounded-br-md"
+                : "text-secondary rounded-bl-md"
             }`}
           >
             {message.isStreaming && !message.content ? (
@@ -102,7 +105,7 @@ export default function ChatMessage({ message, userType, onRequestExport }: Chat
               </div>
             ) : isAssistant ? (
               <div className="prose prose-invert prose-sm max-w-none [&>p]:mb-2 [&>p:last-child]:mb-0 [&>ul]:mt-1 [&>ol]:mt-1 [&_strong]:text-secondary [&_a]:text-[#8AB4F8] [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm">
-                <ReactMarkdown components={CHAT_MD_COMPONENTS}>{message.content}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={CHAT_MD_COMPONENTS}>{message.content}</ReactMarkdown>
                 {message.isStreaming && (
                   <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1 align-middle rounded-sm" />
                 )}
@@ -113,9 +116,38 @@ export default function ChatMessage({ message, userType, onRequestExport }: Chat
           </div>
         )}
 
+        {/* Message Actions (Assistant only) */}
+        {isAssistant && !message.isStreaming && (
+          <div className="flex items-center gap-1 ml-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(message.content || "");
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className="px-1.5 rounded-md text-muted-foreground hover:text-secondary hover:bg-white/5 transition-all"
+              title="Copy message"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              className="p-1.5 rounded-md text-muted-foreground hover:text-secondary hover:bg-white/5 transition-all"
+              title="Helpful"
+            >
+              <ThumbsUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              className="p-1.5 rounded-md text-muted-foreground hover:text-secondary hover:bg-white/5 transition-all"
+              title="Not helpful"
+            >
+              <ThumbsDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Timestamp */}
         {!hasAnalysis && (
-          <p className={`text-[10px] text-muted-foreground mt-1.5 font-mono ${isUser ? "text-right" : "text-left"}`}>
+          <p className={`text-[10px] text-muted-foreground ml-4.5 font-mono ${isUser ? "text-right" : "text-left"}`}>
             {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </p>
         )}

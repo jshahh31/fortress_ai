@@ -1,8 +1,7 @@
 """
-LLM Service — Local inference via SSH Tunnel (Qwen and Gemma).
+LLM Service — Local inference via SSH Tunnel (Qwen-2.5-VL).
 
 Uses the OpenAI-compatible chat completions API.
-Models are accessed through their respective local endpoints.
 """
 
 from __future__ import annotations

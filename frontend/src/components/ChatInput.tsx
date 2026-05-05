@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Send, Paperclip, X, FileText, Loader2, Scale, User as UserIcon } from "lucide-react";
 import { UserType, ContractType, CONTRACT_TYPE_LABELS } from "@/types";
 
 interface ChatInputProps {
-  onSend: (message: string, file?: File) => void;
+  onSend: (message: string, files?: File[]) => void;
   isStreaming: boolean;
   showRoleSelector?: boolean;
   userType: UserType;
   onUserTypeChange: (type: UserType) => void;
   selectedContractType?: ContractType;
   onStop?: () => void;
+  externalFiles?: File[];
+  onExternalFilesUsed?: () => void;
 }
 
 export default function ChatInput({
@@ -22,20 +24,30 @@ export default function ChatInput({
   onUserTypeChange,
   selectedContractType,
   onStop,
+  externalFiles,
+  onExternalFilesUsed,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
-  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+
+  // Sync with external files (e.g. from drag and drop)
+  useEffect(() => {
+    if (externalFiles && externalFiles.length > 0) {
+      setAttachedFiles((prev) => [...prev, ...externalFiles]);
+      onExternalFilesUsed?.();
+    }
+  }, [externalFiles, onExternalFilesUsed]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = () => {
     const trimmed = input.trim();
-    if (!trimmed && !attachedFile) return;
+    if (!trimmed && attachedFiles.length === 0) return;
     if (isStreaming) return;
 
-    onSend(trimmed || "Analyze the attached document.", attachedFile || undefined);
+    onSend(trimmed || "Analyze the attached documents.", attachedFiles.length > 0 ? attachedFiles : undefined);
     setInput("");
-    setAttachedFile(null);
+    setAttachedFiles([]);
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -50,8 +62,8 @@ export default function ChatInput({
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) setAttachedFile(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) setAttachedFiles((prev) => [...prev, ...files]);
     e.target.value = "";
   };
 
@@ -63,61 +75,28 @@ export default function ChatInput({
     }
   };
 
-  const canSend = (input.trim().length > 0 || attachedFile) && !isStreaming;
+  const canSend = (input.trim().length > 0 || attachedFiles.length > 0) && !isStreaming;
 
   return (
     <div className="px-4 md:px-8 pb-6 pt-2">
       <div className="max-w-3xl mx-auto">
-        {/* User role toggle */}
-        {showRoleSelector && (
-          <div className="mb-3 flex items-center gap-2">
-            <span className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider mr-1">
-              I am:
-            </span>
-            <button
-              onClick={() => onUserTypeChange("attorney")}
-              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
-                userType === "attorney"
-                  ? "bg-primary/15 border-primary/30 text-primary"
-                  : "bg-white/5 border-white/10 text-muted-foreground hover:text-secondary"
-              }`}
-            >
-              <Scale className="w-3.5 h-3.5" /> Attorney
-            </button>
-            <button
-              onClick={() => onUserTypeChange("individual")}
-              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
-                userType === "individual"
-                  ? "bg-primary/15 border-primary/30 text-primary"
-                  : "bg-white/5 border-white/10 text-muted-foreground hover:text-secondary"
-              }`}
-            >
-              <UserIcon className="w-3.5 h-3.5" /> Individual
-            </button>
-            {selectedContractType && (
-              <span className="ml-auto text-[10px] font-mono text-muted-foreground bg-white/5 px-2 py-1 rounded-md border border-white/10">
-                {CONTRACT_TYPE_LABELS[selectedContractType]}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Attached file preview */}
-        {attachedFile && (
-          <div className="mb-3 flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm w-fit">
-            <FileText className="w-4 h-4 text-primary shrink-0" />
-            <span className="text-secondary font-medium truncate max-w-[250px]">
-              {attachedFile.name}
-            </span>
-            <span className="text-[11px] text-muted-foreground">
-              ({(attachedFile.size / 1024 / 1024).toFixed(1)} MB)
-            </span>
-            <button
-              onClick={() => setAttachedFile(null)}
-              className="p-1 rounded-md hover:bg-danger/10 text-muted-foreground hover:text-danger transition-colors ml-1"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+        {/* Attached files preview */}
+        {attachedFiles.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {attachedFiles.map((file, idx) => (
+              <div key={`${file.name}-${idx}`} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs w-fit group">
+                <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="text-secondary font-medium truncate max-w-[150px]">
+                  {file.name}
+                </span>
+                <button
+                  onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                  className="p-1 rounded-md hover:bg-danger/10 text-muted-foreground hover:text-danger transition-colors ml-1"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -140,13 +119,14 @@ export default function ChatInput({
             onClick={() => fileInputRef.current?.click()}
             disabled={isStreaming}
             className="shrink-0 p-2 rounded-xl hover:bg-white/10 text-muted-foreground hover:text-secondary transition-colors disabled:opacity-30"
-            aria-label="Attach a document"
+            aria-label="Attach documents"
           >
             <Paperclip className="w-5 h-5" />
           </button>
           <input
             ref={fileInputRef}
             type="file"
+            multiple
             accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp,.heic"
             onChange={handleFileChange}
             className="hidden"

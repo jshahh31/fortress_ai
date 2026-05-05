@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   ShieldCheck,
   MessageSquarePlus,
@@ -7,6 +8,11 @@ import {
   Settings,
   FileText,
   PanelLeft,
+  Zap,
+  Info,
+  Languages,
+  Mail,
+  Upload,
 } from "lucide-react";
 import { Conversation, CONTRACT_TYPE_LABELS } from "@/types";
 import ChatActionsMenu from "./ChatActionsMenu";
@@ -20,6 +26,7 @@ interface SidebarProps {
   onRenameConversation?: (id: string, name: string) => void;
   onPinConversation?: (id: string) => void;
   onToggleSidebar?: () => void;
+  isDragging?: boolean;
 }
 
 const VERDICT_DOT: Record<string, string> = {
@@ -38,9 +45,14 @@ export default function Sidebar({
   onRenameConversation,
   onPinConversation,
   onToggleSidebar,
+  isDragging = false,
 }: SidebarProps) {
+  const [showFooterMenu, setShowFooterMenu] = useState(false);
+
   return (
-    <aside className="w-72 border-r border-white/10 bg-surface/80 backdrop-blur-2xl flex flex-col hidden md:flex z-20 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
+    <aside className={`w-72 border-r border-white/10 bg-surface/80 backdrop-blur-2xl flex flex-col hidden md:flex z-20 shadow-[4px_0_24px_rgba(0,0,0,0.2)] transition-all duration-300 ${
+      isDragging ? "ring-2 ring-primary ring-inset bg-primary/5" : ""
+    }`}>
       {/* Brand */}
       <div className="h-16 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center">
@@ -66,20 +78,35 @@ export default function Sidebar({
       <div className="px-4 pt-4 pb-2 shrink-0">
         <button
           onClick={onNewChat}
-          className="w-full glass-panel glass-panel-hover rounded-xl px-4 py-2 flex items-center justify-between text-sm font-semibold text-muted-foreground hover:text-secondary transition-all"
+          className="w-full glass-panel glass-panel-hover rounded-lg px-4 py-3 flex items-center justify-between text-sm font-semibold text-muted-foreground hover:text-secondary transition-all group"
         >
           <div className="flex items-center gap-2.5">
             <MessageSquarePlus className="w-4 h-4 text-primary" />
             New Analysis
           </div>
-          <kbd className="hidden md:inline-flex items-center gap-1 px-2 py-1 text-[11px] font-mono font-bold rounded-md bg-white/10 text-muted-foreground border border-white/10">
-            <span className="text-[13px] leading-none mt-[1px]">⌘</span>K
-          </kbd>
+          <span className="flex items-center gap-1">
+            <kbd className="hidden md:inline-flex items-center justify-center h-5 min-w-[22px] px-1 text-[11px] leading-none font-inter font-black rounded-[4px] bg-white/[0.08] text-muted-foreground border border-white/10 shadow-[0_1px_2px_rgba(0,0,0,0.3)] group-hover:border-white/20 group-hover:text-secondary transition-colors">
+              ⌘
+            </kbd>
+            <kbd className="hidden md:inline-flex items-center justify-center h-5 min-w-[20px] px-1 text-[13px] leading-none font-inter font-black rounded-[4px] bg-white/[0.08] text-muted-foreground border border-white/10 shadow-[0_1px_2px_rgba(0,0,0,0.3)] group-hover:border-white/20 group-hover:text-secondary transition-colors">
+              K
+            </kbd>
+          </span>
         </button>
       </div>
 
       {/* Conversation History */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1 scrollbar-hide relative">
+        {isDragging && (
+          <div className="absolute inset-0 z-10 bg-surface/60 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center animate-in fade-in duration-300">
+            <div className="w-12 h-12 rounded-2xl bg-primary/20 border border-primary/30 flex items-center justify-center mb-3 animate-bounce">
+              <Upload className="w-6 h-6 text-primary" />
+            </div>
+            <p className="text-xs font-bold text-secondary uppercase tracking-wider">Drop to start</p>
+            <p className="text-[10px] text-muted-foreground mt-1">New analysis will begin</p>
+          </div>
+        )}
+        
         {conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
             <Clock className="w-5 h-5 mb-2 opacity-50" />
@@ -93,7 +120,7 @@ export default function Sidebar({
               <div
                 key={conv.id}
                 onClick={() => onSelectConversation(conv.id)}
-                className={`w-full cursor-pointer text-left flex items-start gap-3 px-3 py-3 rounded-xl transition-all duration-200 group relative ${
+                className={`w-full cursor-pointer text-left flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 group relative ${
                   isActive
                     ? "bg-white/10 border border-white/20 shadow-sm"
                     : "border border-transparent hover:bg-white/5"
@@ -139,6 +166,32 @@ export default function Sidebar({
         )}
       </div>
 
+      {/* Footer Menu */}
+      {showFooterMenu && (
+        <div className="px-3 py-2 border-t border-white/5 space-y-0.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-secondary hover:bg-white/5 transition-all group">
+            <Zap className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+            <span>Upgrade Plan</span>
+          </button>
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-secondary hover:bg-white/5 transition-all">
+            <Info className="w-4 h-4" />
+            <span>About Us</span>
+          </button>
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-secondary hover:bg-white/5 transition-all relative">
+            <Languages className="w-4 h-4" />
+            <span>Language</span>
+          </button>
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-secondary hover:bg-white/5 transition-all">
+            <Mail className="w-4 h-4" />
+            <span>User Feedback</span>
+          </button>
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-secondary hover:bg-white/5 transition-all">
+            <Settings className="w-4 h-4" />
+            <span>Settings</span>
+          </button>
+        </div>
+      )}
+
       {/* Footer */}
       <div className="px-4 py-4 border-t border-white/10 shrink-0">
         <div className="flex items-center gap-3 px-2">
@@ -149,8 +202,15 @@ export default function Sidebar({
             <p className="text-xs font-semibold text-secondary truncate">Fortress AI</p>
             <p className="text-[10px] text-muted-foreground">Contract Risk Assessment</p>
           </div>
-          <button className="p-1.5 rounded-lg hover:bg-white/5 text-muted-foreground transition-colors">
-            <Settings className="w-4 h-4" />
+          <button
+            onClick={() => setShowFooterMenu(!showFooterMenu)}
+            className={`p-1.5 rounded-lg transition-all duration-200 ${
+              showFooterMenu
+                ? "bg-primary/10 text-primary shadow-[0_0_10px_rgba(24,86,255,0.1)]"
+                : "hover:bg-white/5 text-muted-foreground hover:text-secondary"
+            }`}
+          >
+            <Settings className={`w-4 h-4 transition-transform duration-300 ${showFooterMenu ? 'rotate-90' : ''}`} />
           </button>
         </div>
       </div>

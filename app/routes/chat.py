@@ -7,18 +7,43 @@ import uuid
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import StreamingResponse
-
-from app.core.config import settings
-from app.db.store import store
-from app.schemas.chat import ChatRequest, ChatResponse, FileUploadResponse
-from app.services import llm
-from app.services.analysis import run_pipeline
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
+from fastapi.responses import StreamingResponse, Response
+from app.services.export_service import generate_docx
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+# ─── File Export ─────────────────────────────────────────────
+
+@router.get("/export/{conversation_id}")
+async def export_conversation(
+    conversation_id: str,
+    format: str = Query("docx", enum=["pdf", "docx"]),
+):
+    """Export the conversation report as PDF or DOCX."""
+    
+    if format == "docx":
+        file_stream = await generate_docx(conversation_id)
+        if not file_stream:
+            raise HTTPException(status_code=404, detail="Could not generate DOCX. Ensure a report exists.")
+            
+        filename = f"Fortress_AI_Report_{conversation_id[:8]}.docx"
+        return Response(
+            content=file_stream.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    
+    elif format == "pdf":
+        # Placeholder since we don't have a PDF generator
+        raise HTTPException(
+            status_code=501, 
+            detail="PDF export is currently being upgraded. Please use DOCX or the UI export button."
+        )
+
+    raise HTTPException(status_code=400, detail="Unsupported format")
 
 # ─── System prompt for conversational chat ───────────────────
 
@@ -31,6 +56,11 @@ Your role:
 - Tailor your language based on whether the user is an attorney or individual
 - Be thorough but accessible — avoid unnecessary jargon with individuals
 - Always recommend consulting a qualified legal professional for final decisions
+
+Formatting Instructions:
+- **TABLES:** When providing comparisons, risk levels, or structured data, ALWAYS use standard Markdown tables.
+- **IMPORTANT:** DO NOT wrap tables in code blocks (triple backticks). Provide them as raw Markdown text so the system can style them properly.
+- **EXPORTS:** You can now provide PDF and DOCX versions of your analysis reports. When a user asks for a downloadable version or a file, provide a link in this format: `[Download DOCX Report](/api/chat/export/{conversation_id}?format=docx)`.
 
 When a user uploads a contract, guide them through the analysis process.
 When asked general legal questions, provide helpful context while noting you are an AI assistant.
@@ -70,7 +100,7 @@ async def send_message(req: ChatRequest):
     messages = [{"role": m.role.value, "content": m.content} for m in history]
 
     # Generate response using Kimi (best for conversational synthesis)
-    system = FORTRESS_SYSTEM_PROMPT
+    system = FORTRESS_SYSTEM_PROMPT.replace("{conversation_id}", conv_id)
     if req.user_type:
         system += f"\n\nThe user's role is: {req.user_type.value}."
     if req.contract_type:
@@ -124,7 +154,7 @@ async def stream_message(req: ChatRequest):
     history = await store.get_messages(conv_id)
     messages = [{"role": m.role.value, "content": m.content} for m in history]
 
-    system = FORTRESS_SYSTEM_PROMPT
+    system = FORTRESS_SYSTEM_PROMPT.replace("{conversation_id}", conv_id)
     if req.user_type:
         system += f"\n\nThe user's role is: {req.user_type.value}."
     if req.contract_type:

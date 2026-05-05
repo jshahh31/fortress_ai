@@ -107,4 +107,13 @@
   .verdict-counsel {
     @apply bg-primary/10 border-primary/30 text-primary shadow-[0_0_30px_rgba(24,86,255,0.15)];
   }
+
+  /* ── Hide scrollbars ────────────────────── */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }

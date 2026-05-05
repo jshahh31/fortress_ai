@@ -11,9 +11,9 @@
 
 ## 🚀 Key Features
 
-- **Multi-Agent Pipeline**: Orchestrated via LangGraph, utilizing specialized LLMs:
-    - **Qwen 3.6 (35B)**: High-precision extraction and rigorous legal risk analysis.
-    - **Gemma 4 e4b**: Deep legal research and professional report synthesis.
+- **Unified Qwen Pipeline**: Orchestrated via LangGraph, utilizing **Qwen-2.5-VL-72B-Instruct** for all audit stages:
+    - High-precision extraction and rigorous legal risk analysis.
+    - Deep legal research and professional report synthesis.
 - **Hardware-Aware Design**: Built for ROCm 7.x, with real-time VRAM and temperature monitoring for AMD MI300X clusters.
 - **High-Density RAG**: Integrated **Qdrant** vector database using `BAAI/bge-m3` embeddings for multilingual legal context.
 - **Modern UI/UX**: A "Cyber-Secure Professional" dashboard built with Next.js 15, Tailwind v4, and Framer Motion.
@@ -39,12 +39,12 @@
 
 ## 📐 Architecture
 
-The system follows a 4-node "Chain of Thought" pipeline:
+The system follows a 4-node "Chain of Thought" pipeline powered by **Qwen-2.5-VL**:
 
-1.  🔍 **Extraction Node**: (Qwen) Parses raw legal text into structured JSON.
-2.  📚 **Research Node**: (Gemma) Queries the vector store for relevant precedents.
-3.  ⚠️ **Risk Node**: (Qwen) Identifies liabilities and calculates compliance scores.
-4.  📝 **Reporter Node**: (Gemma) Streams a final, human-readable audit report.
+1.  🔍 **Extraction Node**: Parses raw legal text into structured JSON.
+2.  📚 **Research Node**: Queries the vector store and web for relevant precedents.
+3.  ⚠️ **Risk Node**: Identifies liabilities and calculates compliance scores.
+4.  📝 **Reporter Node**: Streams a final, human-readable audit report.
 
 
 ## 🛡 License

@@ -39,15 +39,40 @@ async def extraction_node(state: AuditState) -> AuditState:
         
     return {"extracted_data": extracted_data, "gpu_id": "GPU 0 (Qwen)"}
 
+from app.services.search import search_service
+from app.services.vector_db import vector_db
+
 async def research_node(state: AuditState) -> AuditState:
-    """Queries Qdrant for precedents using Qwen (mocked for now)."""
-    # In a real scenario, we'd use bge-m3 to embed state['extracted_data'] and query Qdrant.
-    messages = [
-        SystemMessage(content="You are a legal researcher AI. Summarize relevant legal precedents based on the extracted data."),
-        HumanMessage(content=f"Extracted data:\n{state['extracted_data']}")
+    """Queries both Web (Tavily) and Internal DB (Qdrant) for a complete legal context."""
+    
+    # 1. Ask Qwen to generate a search query
+    query_msg = [
+        SystemMessage(content="You are a legal researcher. Generate a single precise search query to find relevant laws or precedents. Return ONLY the query string."),
+        HumanMessage(content=f"Contract Data:\n{state['extracted_data']}")
     ]
-    response = await qwen_llm.ainvoke(messages)
-    return {"research_findings": [response.content], "gpu_id": "GPU 0 (Qwen)"}
+    query_resp = await qwen_llm.ainvoke(query_msg)
+    search_query = query_resp.content.strip().strip('"')
+
+    # 2. Perform Web Search (External Knowledge)
+    web_results = await search_service.search(search_query)
+    web_context = "\n\n".join([f"Web Source: {r['url']}\nContent: {r['content']}" for r in web_results])
+
+    # 3. Perform Qdrant Search (Internal Precedents)
+    try:
+        internal_results = await vector_db.search(search_query, limit=3)
+        internal_context = "\n\n".join([f"Internal Precedent: {r.get('filename', 'Unknown')}\nContent: {r.get('content', '')}" for r in internal_results])
+    except Exception as e:
+        logger.warning(f"Qdrant search failed: {e}")
+        internal_context = "No internal precedents found."
+
+    # 4. Summarize findings from both sources
+    summary_msg = [
+        SystemMessage(content="You are a legal researcher AI. Summarize the following findings from both Web Search and Internal Precedents. Highlight any conflicts between current law and historical company practices."),
+        HumanMessage(content=f"QUERY: {search_query}\n\nWEB FINDINGS:\n{web_context}\n\nINTERNAL FINDINGS:\n{internal_context}")
+    ]
+    response = await qwen_llm.ainvoke(summary_msg)
+    
+    return {"research_findings": [response.content], "gpu_id": "GPU 0 (Qwen + Web + Qdrant)"}
 
 async def risk_node(state: AuditState) -> AuditState:
     """Evaluates risks using Qwen."""

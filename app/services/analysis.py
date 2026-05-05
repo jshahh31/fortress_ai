@@ -102,11 +102,15 @@ async def run_pipeline(
     # ── Step 1: Document Parsing ─────────────────────────────
     yield _sse({"event": "step_update", "data": {"step_id": "parsing", "status": "processing"}})
     try:
-        parsed = await llm.generate(
+        parsed = ""
+        async for chunk in llm.stream(
             prompt=f"Parse this legal document:\n\n{text}{context_suffix}",
             system_prompt=SYSTEM_PARSING,
             temperature=0.3,
-        )
+        ):
+            parsed += chunk
+            yield _sse({"event": "content_chunk", "data": {"chunk": chunk, "step_id": "parsing"}})
+        
         yield _sse({"event": "step_update", "data": {"step_id": "parsing", "status": "completed"}})
     except Exception as e:
         logger.error(f"Parsing failed: {e}")
@@ -117,11 +121,15 @@ async def run_pipeline(
     # ── Step 2: Clause Extraction ────────────────────────────
     yield _sse({"event": "step_update", "data": {"step_id": "extraction", "status": "processing"}})
     try:
-        extracted = await llm.generate(
+        extracted = ""
+        async for chunk in llm.stream(
             prompt=f"Extract clauses from this parsed document:\n\n{parsed}",
             system_prompt=SYSTEM_EXTRACTION,
             temperature=0.3,
-        )
+        ):
+            extracted += chunk
+            yield _sse({"event": "content_chunk", "data": {"chunk": chunk, "step_id": "extraction"}})
+            
         yield _sse({"event": "step_update", "data": {"step_id": "extraction", "status": "completed"}})
     except Exception as e:
         logger.error(f"Extraction failed: {e}")
@@ -132,11 +140,15 @@ async def run_pipeline(
     # ── Step 3: Risk Analysis ────────────────────────────────
     yield _sse({"event": "step_update", "data": {"step_id": "risk", "status": "processing"}})
     try:
-        risk_analysis = await llm.generate(
+        risk_analysis = ""
+        async for chunk in llm.stream(
             prompt=f"Assess risks in these extracted clauses:\n\n{extracted}",
             system_prompt=SYSTEM_RISK,
             temperature=0.3,
-        )
+        ):
+            risk_analysis += chunk
+            yield _sse({"event": "content_chunk", "data": {"chunk": chunk, "step_id": "risk"}})
+            
         yield _sse({"event": "step_update", "data": {"step_id": "risk", "status": "completed"}})
     except Exception as e:
         logger.error(f"Risk analysis failed: {e}")
