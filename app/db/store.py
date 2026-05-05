@@ -60,7 +60,7 @@ class PrismaStore:
     async def get_conversation(self, id: str) -> Optional[ConversationOut]:
         conv = await self.prisma.conversation.find_unique(
             where={"id": id},
-            include={"messages": {"include": {"attachment": True}, "order": {"timestamp": "asc"}}}
+            include={"messages": {"include": {"attachment": True}, "orderBy": {"timestamp": "asc"}}}
         )
         if not conv:
             return None

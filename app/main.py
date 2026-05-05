@@ -31,7 +31,6 @@ from app.db.store import store
 async def lifespan(app: FastAPI):
     logger.info("🏰 Fortress AI backend starting...")
     logger.info(f"   Qwen endpoint:  {settings.QWEN_API_BASE} ({settings.QWEN_MODEL})")
-    logger.info(f"   Gemma endpoint: {settings.GEMMA_API_BASE} ({settings.GEMMA_MODEL})")
     logger.info(f"   CORS origin:    {settings.FRONTEND_URL}")
 
     # Ensure upload directory exists

@@ -3,7 +3,6 @@ import logging
 from app.worker import celery_app
 from app.services.pubsub import sync_publish_progress
 from app.services import llm
-from app.services.llm import ModelRole
 from app.db.store import store
 
 logger = logging.getLogger(__name__)
@@ -19,26 +18,22 @@ async def process_document_async(task_id: str, file_path: str, user_id: str):
 
         parsed = await llm.generate(
             prompt=f"Parse this document:\n\n{content}",
-            role=ModelRole.SECONDARY,
         )
         
         sync_publish_progress(task_id, user_id, {"status": "processing", "step": "extraction", "progress": 30})
         extracted = await llm.generate(
             prompt=f"Extract clauses:\n\n{parsed}",
-            role=ModelRole.SECONDARY,
         )
 
         # Step 2: Risk Assessment & Deep Analysis with Qwen (Primary model)
         sync_publish_progress(task_id, user_id, {"status": "processing", "step": "risk_assessment", "progress": 60})
         risk_analysis = await llm.generate(
             prompt=f"Assess risks:\n\n{extracted}",
-            role=ModelRole.PRIMARY,
         )
 
         sync_publish_progress(task_id, user_id, {"status": "processing", "step": "report", "progress": 80})
         report = await llm.generate(
             prompt=f"Write final report:\n\n{risk_analysis}",
-            role=ModelRole.PRIMARY,
         )
 
         # Update DB

@@ -15,18 +15,11 @@ class AuditState(TypedDict):
     final_report: str
     gpu_id: str  # Metadata tracking the GPU used
 
-# Initialize the LLMs pointing to the vLLM endpoints
+# Initialize the LLM pointing to the vLLM endpoint
 qwen_llm = ChatOpenAI(
     model=settings.QWEN_MODEL,
     openai_api_key=settings.LOCAL_API_KEY,
     openai_api_base=settings.QWEN_API_BASE,
-    max_tokens=4096,
-)
-
-gemma_llm = ChatOpenAI(
-    model=settings.GEMMA_MODEL,
-    openai_api_key=settings.LOCAL_API_KEY,
-    openai_api_base=settings.GEMMA_API_BASE,
     max_tokens=4096,
 )
 
@@ -47,14 +40,14 @@ async def extraction_node(state: AuditState) -> AuditState:
     return {"extracted_data": extracted_data, "gpu_id": "GPU 0 (Qwen)"}
 
 async def research_node(state: AuditState) -> AuditState:
-    """Queries Qdrant for precedents using Gemma (mocked for now)."""
+    """Queries Qdrant for precedents using Qwen (mocked for now)."""
     # In a real scenario, we'd use bge-m3 to embed state['extracted_data'] and query Qdrant.
     messages = [
         SystemMessage(content="You are a legal researcher AI. Summarize relevant legal precedents based on the extracted data."),
         HumanMessage(content=f"Extracted data:\n{state['extracted_data']}")
     ]
-    response = await gemma_llm.ainvoke(messages)
-    return {"research_findings": [response.content], "gpu_id": "GPU 1 (Gemma)"}
+    response = await qwen_llm.ainvoke(messages)
+    return {"research_findings": [response.content], "gpu_id": "GPU 0 (Qwen)"}
 
 async def risk_node(state: AuditState) -> AuditState:
     """Evaluates risks using Qwen."""
@@ -71,14 +64,14 @@ async def risk_node(state: AuditState) -> AuditState:
     return {"risk_assessment": risk_data, "gpu_id": "GPU 0 (Qwen)"}
 
 async def reporter_node(state: AuditState) -> AuditState:
-    """Synthesizes the final report using Gemma."""
+    """Synthesizes the final report using Qwen."""
     # This node will be used in the streaming endpoint as well
     messages = [
         SystemMessage(content="You are a senior legal reporter. Write a professional audit report based on the findings."),
         HumanMessage(content=f"Extracted: {state['extracted_data']}\nRisk: {state['risk_assessment']}")
     ]
-    response = await gemma_llm.ainvoke(messages)
-    return {"final_report": response.content, "gpu_id": "GPU 1 (Gemma)"}
+    response = await qwen_llm.ainvoke(messages)
+    return {"final_report": response.content, "gpu_id": "GPU 0 (Qwen)"}
 
 # Build the Graph
 workflow = StateGraph(AuditState)

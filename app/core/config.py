@@ -8,10 +8,7 @@ class Settings(BaseSettings):
 
     # ── Local AI Models (SSH Tunnel) ──────────────────────────
     QWEN_API_BASE: str = "http://localhost:8001/v1"
-    QWEN_MODEL: str = "Qwen/Qwen3.6-27B" 
-
-    GEMMA_API_BASE: str = "http://localhost:8002/v1"
-    GEMMA_MODEL: str = "google/gemma-4-E4B"
+    QWEN_MODEL: str = "Qwen/Qwen2.5-VL-72B-Instruct-AWQ"
 
     LOCAL_API_KEY: str = "dummy-key"
 

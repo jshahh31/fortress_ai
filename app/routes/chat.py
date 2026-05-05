@@ -14,7 +14,6 @@ from app.core.config import settings
 from app.db.store import store
 from app.schemas.chat import ChatRequest, ChatResponse, FileUploadResponse
 from app.services import llm
-from app.services.llm import ModelRole
 from app.services.analysis import run_pipeline
 
 logger = logging.getLogger(__name__)
@@ -80,7 +79,6 @@ async def send_message(req: ChatRequest):
     response_text = await llm.generate_with_history(
         messages=messages,
         system_prompt=system,
-        role=ModelRole.SECONDARY,
     )
 
     # Save assistant message
@@ -144,7 +142,6 @@ async def stream_message(req: ChatRequest):
             async for chunk in llm.stream_with_history(
                 messages=messages,
                 system_prompt=system,
-                role=ModelRole.SECONDARY,
             ):
                 full_response.append(chunk)
                 yield f"data: {json.dumps({'event': 'chunk', 'content': chunk})}\n\n"

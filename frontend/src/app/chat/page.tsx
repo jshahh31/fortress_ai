@@ -60,6 +60,15 @@ export default function ChatPage() {
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleStop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsStreaming(false);
+  }, []);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
   const messages = activeConversation?.messages ?? [];
@@ -174,12 +183,13 @@ export default function ChatPage() {
       let reportContent = "";
 
       try {
+        abortControllerRef.current = new AbortController();
         for await (const event of chatApi.audit({
           message: "Please analyze this contract.",
           conversation_id: convId,
           user_type: userType,
           contract_type: contractType,
-        })) {
+        }, abortControllerRef.current.signal)) {
           const ev = event.event as string;
           const data = event.data as Record<string, unknown>;
 
@@ -222,14 +232,23 @@ export default function ChatPage() {
             });
           }
         }
-      } catch (err) {
-        addMessage(convId, {
-          id: genId(), role: "assistant",
-          content: `⚠️ Failed to connect to analysis service. Please ensure the backend is running.\n\n\`\`\`\n${err}\n\`\`\``,
-          timestamp: new Date(),
-        });
+      } catch (err: any) {
+        if (err.name === 'AbortError' || err.message.includes('abort')) {
+          addMessage(convId, {
+            id: genId(), role: "assistant",
+            content: `*Analysis stopped by user.*`,
+            timestamp: new Date(),
+          });
+        } else {
+          addMessage(convId, {
+            id: genId(), role: "assistant",
+            content: `⚠️ Failed to connect to analysis service. Please ensure the backend is running.\n\n\`\`\`\n${err}\n\`\`\``,
+            timestamp: new Date(),
+          });
+        }
       } finally {
         setIsStreaming(false);
+        abortControllerRef.current = null;
       }
     },
     [addMessage, updateMessage, updateConversation, userType, activeConversation]
@@ -442,13 +461,14 @@ export default function ChatPage() {
 
       try {
         let started = false;
+        abortControllerRef.current = new AbortController();
 
         for await (const event of chatApi.stream({
           message: content,
           conversation_id: convId,
           user_type: userType,
           contract_type: activeConversation?.contractType,
-        })) {
+        }, abortControllerRef.current.signal)) {
           const ev = event.event as string;
 
           if (ev === "start") {
@@ -479,14 +499,21 @@ export default function ChatPage() {
             });
           }
         }
-      } catch (err) {
-        addMessage(convId!, {
-          id: genId(), role: "assistant",
-          content: `⚠️ Connection error. Is the backend running?\n\n\`${err}\``,
-          timestamp: new Date(),
-        });
+      } catch (err: any) {
+        if (err.name === 'AbortError' || err.message.includes('abort')) {
+           updateMessage(convId!, assistantMsgId, {
+              isStreaming: false,
+           });
+        } else {
+          addMessage(convId!, {
+            id: genId(), role: "assistant",
+            content: `⚠️ Connection error. Is the backend running?\n\n\`${err}\``,
+            timestamp: new Date(),
+          });
+        }
       } finally {
         setIsStreaming(false);
+        abortControllerRef.current = null;
       }
     },
     [
@@ -610,6 +637,7 @@ export default function ChatPage() {
               userType={userType}
               onUserTypeChange={setUserType}
               showRoleSelector={false}
+              onStop={handleStop}
             />
           </>
         ) : (
@@ -667,6 +695,7 @@ export default function ChatPage() {
               onUserTypeChange={setUserType}
               showRoleSelector={hasMessages}
               selectedContractType={contractType}
+              onStop={handleStop}
             />
           </>
         )}

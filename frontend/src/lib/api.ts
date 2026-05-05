@@ -110,11 +110,12 @@ export const chatApi = {
     conversation_id?: string;
     user_type?: string;
     contract_type?: string;
-  }): AsyncGenerator<Record<string, unknown>> {
+  }, signal?: AbortSignal): AsyncGenerator<Record<string, unknown>> {
     const res = await fetch(`${API_BASE}/api/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
+      signal,
     });
 
     if (!res.ok || !res.body) {
@@ -153,11 +154,12 @@ export const chatApi = {
     conversation_id?: string;
     user_type?: string;
     contract_type?: string;
-  }): AsyncGenerator<Record<string, unknown>> {
+  }, signal?: AbortSignal): AsyncGenerator<Record<string, unknown>> {
     const res = await fetch(`${API_BASE}/api/chat/audit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
+      signal,
     });
 
     if (!res.ok || !res.body) {

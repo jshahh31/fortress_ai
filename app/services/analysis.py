@@ -19,7 +19,6 @@ import uuid
 from typing import AsyncGenerator
 
 from app.services import llm
-from app.services.llm import ModelRole
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +105,6 @@ async def run_pipeline(
         parsed = await llm.generate(
             prompt=f"Parse this legal document:\n\n{text}{context_suffix}",
             system_prompt=SYSTEM_PARSING,
-            role=ModelRole.PRIMARY,
             temperature=0.3,
         )
         yield _sse({"event": "step_update", "data": {"step_id": "parsing", "status": "completed"}})
@@ -122,7 +120,6 @@ async def run_pipeline(
         extracted = await llm.generate(
             prompt=f"Extract clauses from this parsed document:\n\n{parsed}",
             system_prompt=SYSTEM_EXTRACTION,
-            role=ModelRole.PRIMARY,
             temperature=0.3,
         )
         yield _sse({"event": "step_update", "data": {"step_id": "extraction", "status": "completed"}})
@@ -138,7 +135,6 @@ async def run_pipeline(
         risk_analysis = await llm.generate(
             prompt=f"Assess risks in these extracted clauses:\n\n{extracted}",
             system_prompt=SYSTEM_RISK,
-            role=ModelRole.PRIMARY,
             temperature=0.3,
         )
         yield _sse({"event": "step_update", "data": {"step_id": "risk", "status": "completed"}})
@@ -163,7 +159,6 @@ async def run_pipeline(
         async for chunk in llm.stream(
             prompt=report_prompt,
             system_prompt=SYSTEM_REPORT,
-            role=ModelRole.SECONDARY,
             temperature=0.6,
         ):
             yield _sse({"event": "content_chunk", "data": {"chunk": chunk, "step_id": "report"}})

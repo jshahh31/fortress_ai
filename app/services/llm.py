@@ -18,42 +18,21 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-class ModelRole(str, Enum):
-    """Which model to use for a given task."""
-    # Qwen 27B — strong at structured extraction, risk analysis, complex coding, bilingual
-    PRIMARY = "primary"
-    # Gemma 4B/9B — strong at synthesis, report writing, creative reasoning, strict logic
-    SECONDARY = "secondary"
-
-
 # ── Local clients (OpenAI-compatible) ────────────────────────
 
 _qwen_client: Optional[AsyncOpenAI] = None
-_gemma_client: Optional[AsyncOpenAI] = None
 
+def _get_client() -> AsyncOpenAI:
+    global _qwen_client
+    if _qwen_client is None:
+        _qwen_client = AsyncOpenAI(
+            api_key=settings.LOCAL_API_KEY,
+            base_url=settings.QWEN_API_BASE,
+        )
+    return _qwen_client
 
-def _get_client(role: ModelRole) -> AsyncOpenAI:
-    global _qwen_client, _gemma_client
-    if role == ModelRole.PRIMARY:
-        if _qwen_client is None:
-            _qwen_client = AsyncOpenAI(
-                api_key=settings.LOCAL_API_KEY,
-                base_url=settings.QWEN_API_BASE,
-            )
-        return _qwen_client
-    else:
-        if _gemma_client is None:
-            _gemma_client = AsyncOpenAI(
-                api_key=settings.LOCAL_API_KEY,
-                base_url=settings.GEMMA_API_BASE,
-            )
-        return _gemma_client
-
-
-def _get_model_name(role: ModelRole) -> str:
-    if role == ModelRole.PRIMARY:
-        return settings.QWEN_MODEL
-    return settings.GEMMA_MODEL
+def _get_model_name() -> str:
+    return settings.QWEN_MODEL
 
 
 # ─── Public API ──────────────────────────────────────────────
@@ -61,13 +40,12 @@ def _get_model_name(role: ModelRole) -> str:
 async def generate(
     prompt: str,
     system_prompt: Optional[str] = None,
-    role: ModelRole = ModelRole.SECONDARY,
     temperature: float = 0.7,
     max_tokens: int = 4096,
 ) -> str:
     """Generate a complete response from the LLM (non-streaming)."""
-    client = _get_client(role)
-    model = _get_model_name(role)
+    client = _get_client()
+    model = _get_model_name()
 
     messages: List[Dict[str, Any]] = []
     if system_prompt:
@@ -82,9 +60,8 @@ async def generate(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=False,
-        extra_body={
-            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>\\n'}}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\\n{% endif %}"
-        }
+        presence_penalty=0.6,
+        frequency_penalty=0.6,
     )
 
     content = response.choices[0].message.content or ""
@@ -95,13 +72,12 @@ async def generate(
 async def stream(
     prompt: str,
     system_prompt: Optional[str] = None,
-    role: ModelRole = ModelRole.SECONDARY,
     temperature: float = 0.7,
     max_tokens: int = 4096,
 ) -> AsyncGenerator[str, None]:
     """Stream response chunks from the LLM."""
-    client = _get_client(role)
-    model = _get_model_name(role)
+    client = _get_client()
+    model = _get_model_name()
 
     messages: List[Dict[str, Any]] = []
     if system_prompt:
@@ -116,9 +92,8 @@ async def stream(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=True,
-        extra_body={
-            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>\\n'}}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\\n{% endif %}"
-        }
+        presence_penalty=0.6,
+        frequency_penalty=0.6,
     )
 
     async for chunk in response:
@@ -129,13 +104,12 @@ async def stream(
 async def generate_with_history(
     messages: List[Dict[str, str]],
     system_prompt: Optional[str] = None,
-    role: ModelRole = ModelRole.SECONDARY,
     temperature: float = 0.7,
     max_tokens: int = 4096,
 ) -> str:
     """Generate with full conversation history (for multi-turn chat)."""
-    client = _get_client(role)
-    model = _get_model_name(role)
+    client = _get_client()
+    model = _get_model_name()
 
     api_messages: List[Dict[str, Any]] = []
     if system_prompt:
@@ -150,9 +124,8 @@ async def generate_with_history(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=False,
-        extra_body={
-            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>\\n'}}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\\n{% endif %}"
-        }
+        presence_penalty=0.6,
+        frequency_penalty=0.6,
     )
 
     return response.choices[0].message.content or ""
@@ -161,13 +134,12 @@ async def generate_with_history(
 async def stream_with_history(
     messages: List[Dict[str, str]],
     system_prompt: Optional[str] = None,
-    role: ModelRole = ModelRole.SECONDARY,
     temperature: float = 0.7,
     max_tokens: int = 4096,
 ) -> AsyncGenerator[str, None]:
     """Stream with full conversation history."""
-    client = _get_client(role)
-    model = _get_model_name(role)
+    client = _get_client()
+    model = _get_model_name()
 
     api_messages: List[Dict[str, Any]] = []
     if system_prompt:
@@ -182,9 +154,8 @@ async def stream_with_history(
         temperature=temperature,
         max_tokens=max_tokens,
         stream=True,
-        extra_body={
-            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>\\n'}}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\\n{% endif %}"
-        }
+        presence_penalty=0.6,
+        frequency_penalty=0.6,
     )
 
     async for chunk in response:
@@ -193,13 +164,12 @@ async def stream_with_history(
 
 
 async def check_connectivity() -> Dict[str, bool]:
-    """Quick check if both models respond."""
+    """Quick check if the model responds."""
     results = {}
-    for role_name, role in [("qwen", ModelRole.PRIMARY), ("gemma", ModelRole.SECONDARY)]:
-        try:
-            resp = await generate("Say OK", role=role, max_tokens=5)
-            results[role_name] = len(resp) > 0
-        except Exception as e:
-            logger.warning(f"LLM connectivity check failed for {role_name}: {e}")
-            results[role_name] = False
+    try:
+        resp = await generate("Say OK", max_tokens=5)
+        results["qwen"] = len(resp) > 0
+    except Exception as e:
+        logger.warning(f"LLM connectivity check failed: {e}")
+        results["qwen"] = False
     return results

@@ -13,33 +13,47 @@ services:
       - postgres_data:/var/lib/postgresql/data
     restart: always
 
-  vllm-qwen:
-    image: rocm/vllm:rocm6.0_ubuntu20.04_py3.9_vllm0.3.0 # Update with latest compatible ROCm 7.x image tag when available
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    command: --model Qwen/Qwen2.5-32B-Instruct --port 8000 --tensor-parallel-size 2
+  qwen-service:
+    image: vllm/vllm-openai-rocm:latest
+    container_name: qwen-2.5-vl-72b
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN}
+      - VLLM_TARGET_DEVICE=rocm
+      - PYTORCH_ALLOC_CONF=expandable_segments:True
     devices:
-      - /dev/kfd
-      - /dev/dri
+      - "/dev/kfd:/dev/kfd"
+      - "/dev/dri:/dev/dri"
+    security_opt:
+      - seccomp:unconfined
     group_add:
-      - video
-    ipc: host
-
-  vllm-gemma:
-    image: rocm/vllm:rocm6.0_ubuntu20.04_py3.9_vllm0.3.0 # Update with latest compatible ROCm 7.x image tag when available
+      - "44"
+      - "992"
+    shm_size: '8gb'
+    cap_add:
+      - SYS_PTRACE
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
     ports:
       - "8001:8000"
-    env_file:
-      - .env
-    command: --model google/gemma-2-2b-it --port 8000 --tensor-parallel-size 1
-    devices:
-      - /dev/kfd
-      - /dev/dri
-    group_add:
-      - video
     ipc: host
+    command:
+      - "Qwen/Qwen2.5-VL-72B-Instruct-AWQ"
+      - "--trust-remote-code"
+      - "--gpu-memory-utilization"
+      - "0.95"
+      - "--max-model-len"
+      - "8192"
+      - "--kv-cache-dtype"
+      - "turboquant_4bit_nc"
+
+  qdrant-db:
+    image: qdrant/qdrant:latest
+    container_name: qdrant-db
+    ports:
+      - "6333:6333"
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+    restart: always
 
   backend:
     build: .
@@ -48,13 +62,10 @@ services:
     env_file:
       - .env
     environment:
-      # Override localhost URLs with Docker service hostnames
       DATABASE_URL: postgresql://postgres:postgrespassword@db:5432/fortress?schema=public
       REDIS_URL: redis://redis:6379/0
-      # Route local SSH tunnels through host.docker.internal
-      QWEN_API_BASE: http://host.docker.internal:8001/v1
-      GEMMA_API_BASE: http://host.docker.internal:8002/v1
-      QDRANT_URL: http://qdrant:6333
+      QWEN_API_BASE: http://qwen-service:8000/v1
+      QDRANT_URL: http://qdrant-db:6333
     depends_on:
       db:
         condition: service_started
@@ -80,9 +91,8 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgrespassword@db:5432/fortress?schema=public
       REDIS_URL: redis://redis:6379/0
-      QWEN_API_BASE: http://host.docker.internal:8001/v1
-      GEMMA_API_BASE: http://host.docker.internal:8002/v1
-      QDRANT_URL: http://qdrant:6333
+      QWEN_API_BASE: http://qwen-service:8000/v1
+      QDRANT_URL: http://qdrant-db:6333
     depends_on:
       redis:
         condition: service_started
@@ -92,6 +102,21 @@ services:
       - ./app:/app/app
     restart: on-failure
 
+  frontend:
+    image: node:20-slim
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - backend
+    restart: always
+
 volumes:
   postgres_data:
   redis_data:
+  qdrant_data:

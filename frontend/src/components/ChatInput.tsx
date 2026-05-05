@@ -11,6 +11,7 @@ interface ChatInputProps {
   userType: UserType;
   onUserTypeChange: (type: UserType) => void;
   selectedContractType?: ContractType;
+  onStop?: () => void;
 }
 
 export default function ChatInput({
@@ -20,6 +21,7 @@ export default function ChatInput({
   userType,
   onUserTypeChange,
   selectedContractType,
+  onStop,
 }: ChatInputProps) {
   const [input, setInput] = useState("");
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -115,6 +117,19 @@ export default function ChatInput({
               className="p-1 rounded-md hover:bg-danger/10 text-muted-foreground hover:text-danger transition-colors ml-1"
             >
               <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Stop Generating Button */}
+        {isStreaming && onStop && (
+          <div className="flex justify-center mb-3">
+            <button
+              onClick={onStop}
+              className="flex items-center gap-2 px-4 py-2 bg-surface/80 backdrop-blur border border-white/20 text-sm font-medium text-secondary rounded-full shadow-lg hover:bg-white/10 active:scale-95 transition-all"
+            >
+              <div className="w-2.5 h-2.5 bg-danger rounded-[2px]" />
+              Stop generating
             </button>
           </div>
         )}
