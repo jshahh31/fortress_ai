@@ -1,5 +1,5 @@
 """
-LLM Service — Local inference via SSH Tunnel (Qwen-2.5-VL).
+LLM Service — Local inference via vLLM (Qwen-3.6).
 
 Uses the OpenAI-compatible chat completions API.
 """

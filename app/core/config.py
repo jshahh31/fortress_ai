@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from pathlib import Path
 
 
@@ -8,7 +9,13 @@ class Settings(BaseSettings):
 
     # ── Local AI Models (SSH Tunnel) ──────────────────────────
     QWEN_API_BASE: str = "http://localhost:8001/v1"
-    QWEN_MODEL: str = "Qwen/Qwen2.5-VL-72B-Instruct-AWQ"
+    QWEN_MODEL: str = "Qwen/Qwen3.6-27B"
+
+    @field_validator("QWEN_MODEL", mode="after")
+    @classmethod
+    def force_qwen_model(cls, v: str) -> str:
+        # Force the model ID to match the vLLM server regardless of environment variables
+        return "Qwen/Qwen3.6-27B"
 
     LOCAL_API_KEY: str = "dummy-key"
 

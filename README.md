@@ -11,7 +11,7 @@
 
 ## 🚀 Key Features
 
-- **Unified Qwen Pipeline**: Orchestrated via LangGraph, utilizing **Qwen-2.5-VL-72B-Instruct** for all audit stages:
+- **Unified Qwen Pipeline**: Orchestrated via LangGraph, utilizing **Qwen/Qwen3.6-27B** for all audit stages:
     - High-precision extraction and rigorous legal risk analysis.
     - Deep legal research and professional report synthesis.
 - **Hardware-Aware Design**: Built for ROCm 7.x, with real-time VRAM and temperature monitoring for AMD MI300X clusters.
@@ -39,7 +39,7 @@
 
 ## 📐 Architecture
 
-The system follows a 4-node "Chain of Thought" pipeline powered by **Qwen-2.5-VL**:
+The system follows a 4-node "Chain of Thought" pipeline powered by **Qwen-3.6**:
 
 1.  🔍 **Extraction Node**: Parses raw legal text into structured JSON.
 2.  📚 **Research Node**: Queries the vector store and web for relevant precedents.

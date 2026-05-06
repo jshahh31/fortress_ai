@@ -52,7 +52,7 @@ const METRICS = [
       { label: "Accuracy", value: "94.7%", status: "good" },
       { label: "Avg Latency", value: "3.8s", status: "good" },
       { label: "Token Usage/Day", value: "1.2M", status: "warn" },
-      { label: "Model Version", value: "v2.4", status: "good" },
+      { label: "Model Version", value: "v3.6", status: "good" },
     ],
   },
   {

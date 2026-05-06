@@ -19,13 +19,15 @@ import uuid
 from typing import AsyncGenerator
 
 from app.services import llm
+from app.services.search import search_service
+from app.services.vector_db import vector_db
 
 logger = logging.getLogger(__name__)
 
 # ─── System prompts for each pipeline stage ─────────────────
 
-SYSTEM_PARSING = """You are an expert legal document parser. Carefully read the ENTIRE contract text provided and extract:
-
+SYSTEM_PARSING = """**Agent:** Ingestion Specialist
+You are an expert legal document parser. Carefully read the ENTIRE contract text provided and extract:
 1. Document type: Identify the specific type (e.g., "Employment Agreement", "Lease Agreement", "NDA", "Service Agreement", "Vendor Agreement")
 2. Parties: Extract ALL party names, roles, and addresses mentioned in the document
 3. Key dates: Find effective date, expiration date, renewal dates, notice periods
@@ -50,7 +52,8 @@ Return ONLY a valid JSON object with this exact structure:
 # If the provided text does not contain contract substance, return ONLY:
 # {"error":"INSUFFICIENT_DOCUMENT_TEXT","reason":"string"}
 
-SYSTEM_EXTRACTION = """You are an expert legal clause extraction AI. You will receive the FULL TEXT of a legal document.
+SYSTEM_EXTRACTION = """**Agent:** Ingestion Specialist (Extraction Mode)
+You are an expert legal clause extraction AI. You will receive the FULL TEXT of a legal document.
 
 Your task: Extract ALL significant clauses with their EXACT text from the document.
 
@@ -89,21 +92,19 @@ Return ONLY valid JSON:
 # If no real clauses are present in the source text, return ONLY:
 # {"clauses": []}
 
-SYSTEM_RISK = """You are a senior legal risk assessor. Analyze the extracted clauses for potential risks and unfavorable terms.
+SYSTEM_RESEARCH = """**Agent:** Legal Researcher & Knowledge Retriever
+You are a legal researcher AI. Summarize the findings from both Web Search (current laws/regulations) and Internal Precedents (company standards). 
+Highlight any conflicts between current law and historical company practices or industry standards."""
 
-For EACH clause provided, assess:
-1. Risk level: critical, high, medium, or low
-2. WHY it poses a risk (be specific about the actual terms)
-3. What could go wrong for the user
-4. How it compares to industry standards
-5. Concrete suggestions for negotiation
+SYSTEM_RISK = """**Agent:** Risk Auditor
+You are a senior legal risk assessor. Evaluate the extracted clauses and research findings to provide:
+1. Risk level for each clause: critical, high, medium, or low
+2. Description of why the clause is risky (citing relevant laws if provided in research)
+3. Suggestion for improvement
+4. Industry standard comparison
+5. Red flags that need immediate attention
 
-CRITICAL RULES:
-- Base your assessment ONLY on the actual clause text provided
-- Do not assess clauses that weren't extracted
-- Be specific about which party is disadvantaged
-- Identify one-sided or unfair terms
-- Flag missing protections that should be present
+Base your assessment ONLY on the actual clause text provided. Identify one-sided or unfair terms. Flag missing protections.
 
 Return ONLY valid JSON:
 {
@@ -120,10 +121,10 @@ Return ONLY valid JSON:
   "missing_protections": ["string"]
 }"""
 
-# If there are no clauses to assess, return ONLY:
-# {"error":"NO_CLAUSES_TO_ANALYZE","reason":"string"}
 
-SYSTEM_REPORT = """You are a senior legal report writer. Synthesize all analysis findings into a professional Contract Risk Assessment Report. 
+
+SYSTEM_REPORT = """**Agent:** AI Legal Operations Manager (Final Synthesis)
+You are a senior legal report writer. Synthesize all analysis findings into a professional Contract Risk Assessment Report.
 
 The report should be written in clear, professional language suitable for both attorneys and individuals. Include:
 1. Executive Summary (2-3 paragraphs)
@@ -149,18 +150,14 @@ async def run_pipeline(
 ) -> AsyncGenerator[str, None]:
     """
     Run the full audit pipeline, yielding SSE events for each step.
-
-    Event format (newline-delimited JSON):
-        {"event": "step_update", "data": {"step_id": "...", "status": "processing"}}
-        {"event": "content_chunk", "data": {"chunk": "...", "step_id": "report"}}
-        {"event": "done", "data": {}}
     """
 
     steps = [
-        {"id": "parsing", "label": "Document Parsing", "description": "Analyzing document structure and metadata"},
-        {"id": "extraction", "label": "Clause Extraction", "description": "Identifying key clauses and obligations"},
-        {"id": "risk", "label": "Risk Analysis", "description": "Evaluating risk levels for each clause"},
-        {"id": "report", "label": "Report Generation", "description": "Synthesizing final assessment report"},
+        {"id": "parsing", "label": "Ingestion", "description": "Parsing document structure"},
+        {"id": "extraction", "label": "Extraction", "description": "Identifying key clauses"},
+        {"id": "research", "label": "Legal Research", "description": "Querying Tavily and Qdrant"},
+        {"id": "risk", "label": "Risk Audit", "description": "Evaluating liabilities and red flags"},
+        {"id": "report", "label": "Final Synthesis", "description": "Generating professional report"},
     ]
 
     # Emit initial step list
@@ -172,7 +169,7 @@ async def run_pipeline(
     if user_type:
         context_suffix += f"\nUser Role: {user_type}"
 
-    # ── Step 1: Document Parsing ─────────────────────────────
+    # ── Step 1: Ingestion (Parsing) ─────────────────────────
     yield _sse({"event": "step_update", "data": {"step_id": "parsing", "status": "processing"}})
     try:
         parsed_raw = await llm.generate(
@@ -194,7 +191,7 @@ async def run_pipeline(
 
         parsed = json.dumps(parsed_json, indent=2)
         yield _sse({"event": "content_chunk", "data": {"chunk": parsed, "step_id": "parsing"}})
-        
+
         yield _sse({"event": "step_update", "data": {"step_id": "parsing", "status": "completed"}})
     except Exception as e:
         logger.error(f"Parsing failed: {e}")
@@ -202,7 +199,7 @@ async def run_pipeline(
         yield _sse({"event": "error", "data": {"message": f"Document parsing failed: {str(e)}"}})
         return
 
-    # ── Step 2: Clause Extraction ────────────────────────────
+    # ── Step 2: Extraction ────────────────────────────
     yield _sse({"event": "step_update", "data": {"step_id": "extraction", "status": "processing"}})
     try:
         extracted_raw = await llm.generate(
@@ -221,7 +218,7 @@ async def run_pipeline(
 
         extracted = json.dumps(extracted_json, indent=2)
         yield _sse({"event": "content_chunk", "data": {"chunk": extracted, "step_id": "extraction"}})
-            
+
         yield _sse({"event": "step_update", "data": {"step_id": "extraction", "status": "completed"}})
     except Exception as e:
         logger.error(f"Extraction failed: {e}")
@@ -229,19 +226,67 @@ async def run_pipeline(
         yield _sse({"event": "error", "data": {"message": f"Clause extraction failed: {str(e)}"}})
         return
 
-    # ── Step 3: Risk Analysis ────────────────────────────────
+    # ── Step 3: Legal Research (Tavily + Qdrant) ──────────
+    yield _sse({"event": "step_update", "data": {"step_id": "research", "status": "processing"}})
+    try:
+        # Generate search query
+        query_msg = f"Generate a precise legal search query for this contract:\n{extracted[:2000]}"
+        search_query = await llm.generate(
+            prompt=query_msg,
+            system_prompt="Return ONLY a single precise search query string.",
+            temperature=0.0
+        )
+        search_query = search_query.strip().strip('"')
+
+        # Web Search
+        web_results = await search_service.search(search_query)
+        web_context = "\n".join([f"- {r['content']} ({r['url']})" for r in web_results])
+
+        # Internal Search
+        try:
+            internal_results = await vector_db.search(search_query, limit=3)
+            internal_context = "\n".join([f"- {r.get('content', '')}" for r in internal_results])
+        except:
+            internal_context = "No internal precedents."
+
+        # Summarize Research
+        research_findings = ""
+        research_prompt = (
+            f"QUERY: {search_query}\n\n"
+            f"WEB FINDINGS:\n{web_context}\n\n"
+            f"INTERNAL FINDINGS:\n{internal_context}"
+        )
+        async for chunk in llm.stream(
+            prompt=research_prompt,
+            system_prompt=SYSTEM_RESEARCH,
+            temperature=0.3,
+        ):
+            research_findings += chunk
+            yield _sse({"event": "content_chunk", "data": {"chunk": chunk, "step_id": "research"}})
+
+        yield _sse({"event": "step_update", "data": {"step_id": "research", "status": "completed"}})
+    except Exception as e:
+        logger.error(f"Research failed: {e}")
+        # We don't fail the whole pipeline if research fails
+        research_findings = "Research phase skipped due to technical error."
+        yield _sse({"event": "step_update", "data": {"step_id": "research", "status": "completed"}})
+
+    # ── Step 4: Risk Audit ────────────────────────────────
     yield _sse({"event": "step_update", "data": {"step_id": "risk", "status": "processing"}})
     try:
-        risk_raw = await llm.generate(
-            prompt=f"Assess risks in these extracted clauses:\n\n{extracted}",
-            system_prompt=SYSTEM_RISK,
-            temperature=0.1,
-            max_tokens=2500,
+        risk_analysis = ""
+        risk_prompt = (
+            f"Extracted Clauses:\n{extracted}\n\n"
+            f"Research Findings:\n{research_findings}"
         )
-        risk_json = _parse_json_response(risk_raw)
-        risk_analysis = json.dumps(risk_json, indent=2)
-        yield _sse({"event": "content_chunk", "data": {"chunk": risk_analysis, "step_id": "risk"}})
-            
+        async for chunk in llm.stream(
+            prompt=risk_prompt,
+            system_prompt=SYSTEM_RISK,
+            temperature=0.3,
+        ):
+            risk_analysis += chunk
+            yield _sse({"event": "content_chunk", "data": {"chunk": chunk, "step_id": "risk"}})
+
         yield _sse({"event": "step_update", "data": {"step_id": "risk", "status": "completed"}})
     except Exception as e:
         logger.error(f"Risk analysis failed: {e}")
@@ -249,13 +294,14 @@ async def run_pipeline(
         yield _sse({"event": "error", "data": {"message": f"Risk analysis failed: {str(e)}"}})
         return
 
-    # ── Step 4: Report Generation (streamed) ─────────────────
+    # ── Step 5: Final Synthesis (Report) ─────────────────
     yield _sse({"event": "step_update", "data": {"step_id": "report", "status": "processing"}})
     try:
         report_prompt = (
             f"Write a comprehensive Contract Risk Assessment Report.\n\n"
             f"Parsed Document:\n{parsed}\n\n"
             f"Extracted Clauses:\n{extracted}\n\n"
+            f"Research Findings:\n{research_findings}\n\n"
             f"Risk Assessment:\n{risk_analysis}"
         )
         if user_type:
@@ -277,7 +323,6 @@ async def run_pipeline(
 
     # ── Done ─────────────────────────────────────────────────
     yield _sse({"event": "done", "data": {"risk_analysis": risk_analysis}})
-
 
 def _sse(payload: dict) -> str:
     """Format a dict as an SSE data line."""
