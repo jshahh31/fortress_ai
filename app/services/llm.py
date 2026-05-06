@@ -24,9 +24,16 @@ _qwen_client: Optional[AsyncOpenAI] = None
 def _get_client() -> AsyncOpenAI:
     global _qwen_client
     if _qwen_client is None:
+        api_key = settings.LOCAL_API_KEY
+        # If targeting HF OpenAI-compatible router, prefer HF token when available.
+        if "huggingface.co" in settings.QWEN_API_BASE and settings.HUGGING_FACE_HUB_TOKEN:
+            api_key = settings.HUGGING_FACE_HUB_TOKEN
+
         _qwen_client = AsyncOpenAI(
-            api_key=settings.LOCAL_API_KEY,
+            api_key=api_key,
             base_url=settings.QWEN_API_BASE,
+            timeout=settings.LLM_TIMEOUT_SECONDS,
+            max_retries=settings.LLM_MAX_RETRIES,
         )
     return _qwen_client
 

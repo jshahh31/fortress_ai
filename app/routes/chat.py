@@ -5,10 +5,16 @@ from __future__ import annotations
 import json
 import uuid
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import StreamingResponse, Response
+from app.core.config import settings
+from app.schemas.chat import ChatRequest, ChatResponse, FileUploadResponse
+from app.db.store import store
+from app.services import llm
+from app.services.analysis import run_pipeline
 from app.services.export_service import generate_docx
 
 logger = logging.getLogger(__name__)
@@ -120,6 +126,9 @@ async def send_message(req: ChatRequest):
         content=response_text,
     )
 
+    if not assistant_msg:
+        raise HTTPException(status_code=500, detail="Failed to save assistant message")
+
     return ChatResponse(message=assistant_msg, conversation_id=conv_id)
 
 
@@ -220,11 +229,65 @@ async def stream_audit(req: ChatRequest):
         content=req.message,
     )
 
+    history = await store.get_messages(conv_id)
+
+    # Prefer uploaded document text from system messages when available.
+    # The UI typically sends a short user instruction for /audit, not the full contract body.
+    uploaded_segments: list[str] = []
+    for msg in history:
+        if msg.role.value != "system":
+            continue
+        if not msg.content.startswith("[File uploaded:"):
+            continue
+
+        marker = "\n\n"
+        marker_pos = msg.content.find(marker)
+        if marker_pos == -1:
+            continue
+
+        uploaded_segments.append(msg.content[marker_pos + len(marker):])
+
+    uploaded_text = "\n\n".join(seg for seg in uploaded_segments if seg.strip())
+    if uploaded_text.endswith("..."):
+        uploaded_text = uploaded_text[:-3].rstrip()
+
+    pipeline_text = req.message
+    if uploaded_text.strip():
+        # When a file is uploaded, analyze the raw contract text directly.
+        # Appending a short instruction here can make the model over-focus on it.
+        pipeline_text = uploaded_text
+
+    # Guardrail: prevent running the full pipeline on tiny non-document prompts.
+    if not uploaded_text.strip() and len((req.message or "").strip()) < 300:
+        async def too_short_stream():
+            yield f"data: {json.dumps({'event': 'start', 'conversation_id': conv_id})}\n\n"
+            yield f"data: {json.dumps({'event': 'error', 'data': {'message': 'No document text found. Please upload a document first or paste the full contract text before running audit.'}})}\n\n"
+
+        return StreamingResponse(too_short_stream(), media_type="text/event-stream")
+
+    # Zero-token precheck to avoid running LLM calls on obvious non-contract files.
+    if uploaded_text.strip():
+        is_contract_like, precheck_reason = _precheck_contract_document(uploaded_text)
+        if not is_contract_like:
+            async def non_contract_stream():
+                yield f"data: {json.dumps({'event': 'start', 'conversation_id': conv_id})}\n\n"
+                yield f"data: {json.dumps({'event': 'error', 'data': {'message': precheck_reason}})}\n\n"
+
+            return StreamingResponse(non_contract_stream(), media_type="text/event-stream")
+
+    logger.info(
+        "Audit input | conversation_id=%s | uploaded_segments=%d | uploaded_chars=%d | message_chars=%d",
+        conv_id,
+        len(uploaded_segments),
+        len(uploaded_text),
+        len(req.message or ""),
+    )
+
     async def pipeline_stream():
         yield f"data: {json.dumps({'event': 'start', 'conversation_id': conv_id})}\n\n"
 
         async for event in run_pipeline(
-            text=req.message,
+            text=pipeline_text,
             contract_type=req.contract_type.value if req.contract_type else None,
             user_type=req.user_type.value if req.user_type else None,
         ):
@@ -289,7 +352,7 @@ async def upload_file(
         conversation_id=conversation_id,
         message_id=uuid.uuid4().hex[:12],
         role="system",
-        content=f"[File uploaded: {file.filename}]\n\n{extracted_text[:2000]}..." if len(extracted_text) > 2000 else f"[File uploaded: {file.filename}]\n\n{extracted_text}",
+        content=f"[File uploaded: {file.filename}]\n\n{extracted_text}",
         attachment=attachment,
     )
 
@@ -338,3 +401,179 @@ async def _extract_text(contents: bytes, content_type: str, filename: str | None
     except Exception as e:
         logger.error(f"Text extraction failed: {e}")
         return f"[Error extracting text from {filename}: {str(e)}]"
+
+
+def _precheck_contract_document(text: str) -> tuple[bool, str]:
+    """Cheap heuristic gate to block obvious non-contract files before LLM usage."""
+    sample = (text or "").strip().lower()[:12000]
+    if len(sample) < 120:
+        return (
+            False,
+            "Uploaded text is too short to classify as a contract. Please upload the full contract document.",
+        )
+
+    # Contract-specific markers
+    contract_markers = [
+        "agreement",
+        "contract",
+        "nda",
+        "master service agreement",
+        "statement of work",
+        "sow",
+        "lease",
+        "vendor",
+        "services",
+        "terms and conditions",
+        "obligations",
+        "termination",
+        "confidential",
+        "governing law",
+        "liability",
+        "indemn",
+        "warranty",
+        "payment",
+        "fees",
+        "parties agree",
+        "hereby agree",
+    ]
+    
+    # Litigation/court documents
+    litigation_markers = [
+        "appellant",
+        "appellee",
+        "plaintiff",
+        "defendant",
+        "petitioner",
+        "respondent",
+        "brief",
+        "memorandum of law",
+        "notice of appeal",
+        "case no",
+        "cause no",
+        "docket",
+        "v.",
+        " vs.",
+        "motion to",
+        "petition for",
+        "complaint",
+        "answer",
+        "counterclaim",
+    ]
+    
+    # Academic/research documents
+    academic_markers = [
+        "abstract",
+        "introduction",
+        "methodology",
+        "literature review",
+        "hypothesis",
+        "research question",
+        "bibliography",
+        "references",
+        "et al",
+        "journal of",
+        "university",
+        "dissertation",
+        "thesis",
+        "peer review",
+    ]
+    
+    # News/articles
+    news_markers = [
+        "breaking news",
+        "reported that",
+        "according to sources",
+        "journalist",
+        "editor",
+        "published on",
+        "subscribe",
+        "newsletter",
+        "press release",
+        "media contact",
+    ]
+    
+    # Business reports/memos
+    report_markers = [
+        "executive summary",
+        "quarterly report",
+        "annual report",
+        "financial statement",
+        "balance sheet",
+        "income statement",
+        "memorandum",
+        "to:",
+        "from:",
+        "re:",
+        "subject:",
+        "meeting minutes",
+        "agenda",
+    ]
+    
+    # Legislation/statutes
+    legislation_markers = [
+        "section",
+        "subsection",
+        "statute",
+        "code",
+        "enacted",
+        "legislature",
+        "bill no",
+        "public law",
+        "regulation",
+        "whereas",
+        "be it enacted",
+    ]
+
+    contract_hits = sum(1 for marker in contract_markers if marker in sample)
+    litigation_hits = sum(1 for marker in litigation_markers if marker in sample)
+    academic_hits = sum(1 for marker in academic_markers if marker in sample)
+    news_hits = sum(1 for marker in news_markers if marker in sample)
+    report_hits = sum(1 for marker in report_markers if marker in sample)
+    legislation_hits = sum(1 for marker in legislation_markers if marker in sample)
+
+    # Frequent section style in agreements: numbered clauses and clause headings
+    numbered_sections = len(re.findall(r"(?m)^\s*(\d+(?:\.\d+)*)\s+[A-Z][A-Za-z ]{2,}$", text[:12000]))
+
+    # Reject litigation documents
+    if litigation_hits >= 3 and contract_hits <= 2:
+        return (
+            False,
+            "This appears to be a litigation/court filing, not a contract. Please upload a contract or agreement for audit.",
+        )
+    
+    # Reject academic papers
+    if academic_hits >= 3 and contract_hits <= 1:
+        return (
+            False,
+            "This appears to be an academic paper or research document, not a contract. Please upload a contract or agreement for audit.",
+        )
+    
+    # Reject news articles
+    if news_hits >= 2 and contract_hits <= 1:
+        return (
+            False,
+            "This appears to be a news article or press release, not a contract. Please upload a contract or agreement for audit.",
+        )
+    
+    # Reject business reports/memos
+    if report_hits >= 3 and contract_hits <= 1:
+        return (
+            False,
+            "This appears to be a business report or memo, not a contract. Please upload a contract or agreement for audit.",
+        )
+    
+    # Reject legislation/statutes
+    if legislation_hits >= 3 and contract_hits <= 2:
+        return (
+            False,
+            "This appears to be legislation or a statute, not a contract. Please upload a contract or agreement for audit.",
+        )
+
+    # Require minimum contract signals
+    if contract_hits < 2 and numbered_sections == 0:
+        return (
+            False,
+            "Could not detect contract structure in the uploaded text. Please upload a contract/agreement document (e.g., NDA, Service Agreement, Lease, Employment Contract).",
+        )
+
+    return True, "ok"
