@@ -39,38 +39,57 @@
 
 ## 📐 Architecture
 
-The system follows a 4-node "Chain of Thought" pipeline:
+Fortress AI utilizes a distributed, containerized architecture optimized for low-latency inference and high-fidelity legal analysis.
 
-1.  🔍 **Extraction Node**: Parses raw legal text into structured JSON.
-2.  📚 **Research Node**: Queries the vector store for relevant precedents.
-3.  ⚠️ **Risk Node**: Identifies liabilities and calculates compliance scores.
-4.  📝 **Reporter Node**: Streams a final, human-readable audit report.
+```mermaid
+graph TD
+    User([User / Browser])
+    
+    subgraph Frontend_Cloud [Frontend Container]
+        NextJS[Next.js 15 App]
+        Clerk[Clerk Auth SDK]
+    end
 
----
+    subgraph Backend_Cloud [Backend Infrastructure]
+        API[FastAPI Gateway]
+        LGraph[LangGraph Orchestrator]
+        Celery[Celery Worker]
+        Redis[(Redis Cache)]
+    end
 
-## 🚦 Getting Started
+    subgraph AI_Cloud [Inference Engine]
+        vLLM[vLLM Service]
+        Qwen[[Qwen 3.6 - 27B]]
+    end
 
-### 1. Prerequisites
-- Docker & Docker Compose
-- AMD MI300X GPU (for local LLM inference) or access to a vLLM endpoint.
-- Clerk Account (for Auth keys)
+    subgraph Data_Cloud [Persistence Layer]
+        PG[(PostgreSQL)]
+        Qdrant[(Qdrant Vector DB)]
+    end
 
-### 2. Environment Setup
-Copy `.env.template` to `.env` and fill in your keys:
-```bash
-cp .env.template .env
+    User <--> NextJS
+    NextJS -- Proxies API --> API
+    NextJS -- Validates --> Clerk
+    
+    API <--> LGraph
+    LGraph -- Inference --> vLLM
+    vLLM -- ROCm Accelerated --> Qwen
+    
+    LGraph <--> Qdrant
+    API <--> PG
+    
+    API -- Tasks --> Redis
+    Redis <--> Celery
+    Celery -- RAG / Audit --> LGraph
 ```
-Key variables required:
-- `CLERK_SECRET_KEY` & `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
-- `DATABASE_URL` (Postgres)
-- `QWEN_API_BASE` (vLLM endpoint)
 
-### 3. Launch
-The entire stack is orchestrated via Docker:
-```bash
-docker-compose up -d
-```
-Access the application at `http://localhost:3000`.
+### 🧠 The Audit Pipeline
+The system follows a 4-node "Chain of Thought" process orchestrated by **LangGraph**:
+
+1.  🔍 **Extraction Node**: Converts unstructured PDFs/Docs into clean legal primitives (parties, dates, clauses).
+2.  📚 **Research Node**: Performs semantic search against the **Qdrant** store for precedents and statutory context.
+3.  ⚠️ **Risk Node**: Cross-references clauses against a risk matrix to identify liabilities and red flags.
+4.  📝 **Reporter Node**: Synthesizes the analysis into a professional, human-readable audit report via SSE.
 
 ---
 
