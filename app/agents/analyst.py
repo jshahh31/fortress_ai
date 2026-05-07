@@ -16,8 +16,14 @@ class LegalRiskAnalyst:
         query = state.get("original_query", "")
 
         prompt = f"""
-        You are a Senior Legal Risk Analyst. Your task is to identify potential legal liabilities, 
-        regulatory red flags, and compliance obligations based on the provided context and research.
+        You are a Senior Legal Risk Analyst analyzing a contract with layout-aware extraction.
+        Your task is to identify potential legal liabilities, regulatory red flags, and compliance obligations
+        based on the provided context and research.
+
+        The document may include:
+        - Headers marked with ## prefix
+        - Tables marked with === TABLES DETECTED ===
+        - Page markers like --- Page N ---
 
         QUERY: {query}
         
@@ -32,6 +38,8 @@ class LegalRiskAnalyst:
         2. Identify Penalties: Possible fines or legal consequences for non-compliance.
         3. Identify Obligations: Key actions the user must take to remain compliant.
         4. Categorize each risk as High, Medium, or Low.
+        5. Use section headers and page markers when grounding findings.
+        6. Inspect table content for fees, payment terms, limits of liability, and termination triggers.
 
         OUTPUT FORMAT:
         Return ONLY a JSON object with the following structure:

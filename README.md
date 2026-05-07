@@ -17,6 +17,7 @@
 - **Enterprise Auth**: Secure user management and SSO via **Clerk**.
 - **Live Streaming**: Real-time audit reports via Server-Sent Events (SSE).
 - **Asynchronous Processing**: Background tasks powered by **Celery** and **Redis**.
+- **Advanced PDF Parsing**: **PyMuPDF**-powered extraction with layout-aware text, header detection, and table capture.
 
 ---
 

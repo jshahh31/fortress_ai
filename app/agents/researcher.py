@@ -118,9 +118,15 @@ class HybridResearcher:
 
         # Format context for the next agent
         context_str = "\n\n".join([
-            f"SOURCE: {res['source']}\nCONTENT: {res['content']}"
+            f"SOURCE: {res['source']}\n"
+            f"TYPE: {res.get('type', 'unknown')}\n"
+            f"CONTENT: {res['content']}"
             for res in merged_results
         ])
+
+        document_structure = state.get("document_structure")
+        if document_structure:
+            context_str = f"DOCUMENT STRUCTURE:\n{document_structure}\n\n{context_str}"
 
         # Generate a research summary report
         summary_prompt = f"""

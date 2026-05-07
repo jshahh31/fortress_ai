@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # ── File uploads ──────────────────────────────────────────
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE_MB: int = 25
+    USE_PYMUPDF: bool = True
 
     # ── Clerk Authentication ──────────────────────────────────
     CLERK_JWKS_URL: str = "https://your-app.clerk.accounts.dev/.well-known/jwks.json"

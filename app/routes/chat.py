@@ -17,6 +17,7 @@ from app.schemas.chat import ChatRequest, ChatResponse, FileUploadResponse
 from app.db.store import store
 from app.services import llm
 from app.services.analysis import run_pipeline
+from app.services.document_parser import get_parser
 from app.services.export_service import generate_docx, generate_pdf
 
 logger = logging.getLogger(__name__)
@@ -405,17 +406,27 @@ async def _extract_text(contents: bytes, content_type: str, filename: str | None
 
         elif content_type == "application/pdf":
             try:
-                import PyPDF2
-                import io
-                reader = PyPDF2.PdfReader(io.BytesIO(contents))
-                text_parts = []
-                for page in reader.pages:
-                    text = page.extract_text()
-                    if text:
-                        text_parts.append(text)
-                return "\n\n".join(text_parts)
+                parser = get_parser()
+                parsed = parser.parse_pdf(contents)
+
+                output_parts: list[str] = []
+                title = parsed.metadata.get("title")
+                if title:
+                    output_parts.append(f"# {title}\n")
+                output_parts.append(parsed.text)
+
+                logger.info(
+                    "PDF parsed: %s | pages=%d | blocks=%d | tables=%d",
+                    filename,
+                    parsed.page_count,
+                    len(parsed.blocks),
+                    len(parsed.tables),
+                )
+
+                return "\n".join(part for part in output_parts if part)
             except ImportError:
-                return f"[PDF file: {filename} — install PyPDF2 for text extraction]"
+                logger.warning("PDF parser dependencies not available")
+                return f"[PDF file: {filename}]"
 
         elif "wordprocessingml" in (content_type or ""):
             try:
