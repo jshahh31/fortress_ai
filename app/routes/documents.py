@@ -4,13 +4,14 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from celery.result import AsyncResult
 from app.tasks.document_tasks import process_document
 from app.core.config import settings
+from app.core.auth import get_current_user
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 @router.post("/upload/batch")
 async def upload_batch(
     files: List[UploadFile] = File(...),
-    user_id: str = "demo_user" # Normally from Clerk auth dependency
+    user_id: str = Depends(get_current_user)
 ):
     if len(files) > 10:
         raise HTTPException(status_code=400, detail="Maximum 10 files allowed per batch.")
@@ -31,7 +32,7 @@ async def upload_batch(
     return {"message": f"Successfully queued {len(files)} files.", "tasks": tasks}
 
 @router.post("/tasks/{task_id}/cancel")
-async def cancel_task(task_id: str):
+async def cancel_task(task_id: str, user_id: str = Depends(get_current_user)):
     task = AsyncResult(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")

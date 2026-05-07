@@ -42,6 +42,7 @@ class PrismaStore:
     async def create_conversation(
         self,
         id: str,
+        user_id: str,
         title: str = "New Analysis",
         contract_type: Optional[str] = None,
         user_type: Optional[str] = None,
@@ -52,22 +53,24 @@ class PrismaStore:
                 "title": title,
                 "contractType": contract_type,
                 "userType": user_type,
+                "userId": user_id,
             },
             include={"messages": {"include": {"attachment": True}}}
         )
         return self._to_conversation_out(conv)
 
-    async def get_conversation(self, id: str) -> Optional[ConversationOut]:
-        conv = await self.prisma.conversation.find_unique(
-            where={"id": id},
+    async def get_conversation(self, id: str, user_id: str) -> Optional[ConversationOut]:
+        conv = await self.prisma.conversation.find_first(
+            where={"id": id, "userId": user_id},
             include={"messages": {"include": {"attachment": True}, "orderBy": {"timestamp": "asc"}}}
         )
         if not conv:
             return None
         return self._to_conversation_out(conv)
 
-    async def list_conversations(self) -> List[ConversationSummaryOut]:
+    async def list_conversations(self, user_id: str) -> List[ConversationSummaryOut]:
         convs = await self.prisma.conversation.find_many(
+            where={"userId": user_id},
             order=[{"isPinned": "desc"}, {"timestamp": "desc"}],
         )
         return [self._to_summary(c) for c in convs]
@@ -75,6 +78,7 @@ class PrismaStore:
     async def update_conversation(
         self,
         id: str,
+        user_id: str,
         title: Optional[str] = None,
         is_pinned: Optional[bool] = None,
         verdict: Optional[str] = None,
@@ -93,32 +97,40 @@ class PrismaStore:
         if user_type is not None:
             data["userType"] = user_type
 
-        conv = await self.prisma.conversation.update(
-            where={"id": id},
-            data=data,
-            include={"messages": {"include": {"attachment": True}}}
+        conv = await self.prisma.conversation.update_many(
+            where={"id": id, "userId": user_id},
+            data=data
         )
-        if not conv:
+        if conv == 0:
             return None
-        return self._to_conversation_out(conv)
+            
+        updated_conv = await self.get_conversation(id, user_id)
+        return updated_conv
 
-    async def delete_conversation(self, id: str) -> bool:
-        try:
-            await self.prisma.conversation.delete(where={"id": id})
-            return True
-        except Exception:
-            return False
+    async def delete_conversation(self, id: str, user_id: str) -> bool:
+        deleted = await self.prisma.conversation.delete_many(
+            where={"id": id, "userId": user_id}
+        )
+        return deleted > 0
 
     # ── Messages ─────────────────────────────────────────────
 
     async def add_message(
         self,
         conversation_id: str,
+        user_id: str,
         message_id: str,
         role: str,
         content: str,
         attachment: Optional[dict] = None,
     ) -> Optional[MessageOut]:
+        # Verify conversation belongs to user
+        conv = await self.prisma.conversation.find_first(
+            where={"id": conversation_id, "userId": user_id}
+        )
+        if not conv:
+            return None
+
         data = {
             "id": message_id,
             "role": role,
@@ -152,7 +164,11 @@ class PrismaStore:
 
         return self._to_message_out(msg)
 
-    async def get_messages(self, conversation_id: str) -> List[MessageOut]:
+    async def get_messages(self, conversation_id: str, user_id: str) -> List[MessageOut]:
+        conv = await self.get_conversation(conversation_id, user_id)
+        if not conv:
+            return []
+            
         messages = await self.prisma.message.find_many(
             where={"conversationId": conversation_id},
             order={"timestamp": "asc"},

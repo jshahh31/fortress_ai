@@ -3,14 +3,24 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
 // ─── Generic fetch wrapper ────────────────────────────────────
 
+async function getAuthToken() {
+  if (typeof window !== "undefined") {
+    // @ts-ignore
+    return window.Clerk?.session?.getToken();
+  }
+  return null;
+}
+
 async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
+  const token = await getAuthToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options?.headers ?? {}),
     },
   });
@@ -111,9 +121,13 @@ export const chatApi = {
     user_type?: string;
     contract_type?: string;
   }, signal?: AbortSignal): AsyncGenerator<Record<string, unknown>> {
+    const token = await getAuthToken();
     const res = await fetch(`${API_BASE}/api/chat/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(data),
       signal,
     });
@@ -155,9 +169,13 @@ export const chatApi = {
     user_type?: string;
     contract_type?: string;
   }, signal?: AbortSignal): AsyncGenerator<Record<string, unknown>> {
+    const token = await getAuthToken();
     const res = await fetch(`${API_BASE}/api/chat/audit`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(data),
       signal,
     });
@@ -198,9 +216,14 @@ export const chatApi = {
     const form = new FormData();
     form.append("file", file);
     form.append("conversation_id", conversationId);
+    
+    const token = await getAuthToken();
 
     const res = await fetch(`${API_BASE}/api/chat/upload`, {
       method: "POST",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: form,
       // No Content-Type header — browser sets it with boundary for multipart
     });

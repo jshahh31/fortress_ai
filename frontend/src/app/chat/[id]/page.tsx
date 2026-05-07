@@ -17,6 +17,10 @@ import {
   AnalysisStep,
   CONTRACT_TYPE_LABELS,
   AttachedFile,
+  ContractReport,
+  RiskItem,
+  RedFlag,
+  RiskLevel
 } from "@/types";
 import { conversationsApi, chatApi } from "@/lib/api";
 
@@ -48,6 +52,97 @@ function apiMsgToLocal(m: import("@/lib/api").ApiMessage): Message {
     attachment: m.attachment
       ? { id: m.attachment.id, name: m.attachment.name, size: m.attachment.size, type: m.attachment.type }
       : undefined,
+  };
+}
+
+// ── Parser to build ContractReport from backend output ───────
+function parseBackendReport(riskAnalysis: any, contractType?: ContractType): ContractReport {
+  const safeData = riskAnalysis || {};
+  
+  const mapSeverityToRiskLevel = (sev: string): RiskLevel => {
+    const s = (sev || "").toLowerCase();
+    if (s.includes("crit") || s.includes("high")) return "high"; // backend only has High/Med/Low typically
+    if (s.includes("med")) return "medium";
+    return "low";
+  };
+
+  const rawRedFlags = Array.isArray(safeData.red_flags) ? safeData.red_flags : [];
+  const rawPenalties = Array.isArray(safeData.penalties) ? safeData.penalties : [];
+  const rawObligations = Array.isArray(safeData.obligations) ? safeData.obligations : [];
+
+  const parsedRedFlags: RedFlag[] = rawRedFlags.map((rf: any, i: number) => ({
+    id: `rf-${i}`,
+    title: rf.issue || "Identified Risk",
+    description: rf.description || "Potential liability or violation found.",
+    section: rf.section || "General",
+    severity: mapSeverityToRiskLevel(rf.severity),
+  }));
+
+  const parsedRiskMatrix = {
+    critical: [] as RiskItem[],
+    high: [] as RiskItem[],
+    medium: [] as RiskItem[],
+    low: [] as RiskItem[],
+  };
+
+  // Convert penalties & obligations into RiskMatrix items
+  let itemCounter = 0;
+  [...rawPenalties, ...rawObligations].forEach((item: any) => {
+    const isPenalty = "impact" in item;
+    const level = mapSeverityToRiskLevel(item.severity || "medium");
+    const riskItem: RiskItem = {
+      id: `ri-${itemCounter++}`,
+      clause: isPenalty ? item.type || "Penalty" : item.task || "Obligation",
+      section: item.deadline ? `Deadline: ${item.deadline}` : "General",
+      level,
+      description: isPenalty ? item.impact : item.description,
+    };
+    
+    if (level === "critical") parsedRiskMatrix.critical.push(riskItem);
+    else if (level === "high") parsedRiskMatrix.high.push(riskItem);
+    else if (level === "medium") parsedRiskMatrix.medium.push(riskItem);
+    else parsedRiskMatrix.low.push(riskItem);
+  });
+
+  // Add red flags to high/critical as well if needed, but let's keep them separate to fit UI.
+  // Actually, UI renders all items in the matrix. Let's add red flags to high/critical.
+  rawRedFlags.forEach((rf: any) => {
+    const level = mapSeverityToRiskLevel(rf.severity);
+    const riskItem: RiskItem = {
+      id: `ri-${itemCounter++}`,
+      clause: rf.issue || "Risk Issue",
+      section: rf.section || "General",
+      level,
+      description: rf.description,
+    };
+    if (level === "critical" || level === "high") parsedRiskMatrix.high.push(riskItem);
+    else if (level === "medium") parsedRiskMatrix.medium.push(riskItem);
+    else parsedRiskMatrix.low.push(riskItem);
+  });
+
+  // Calculate verdict based on red flags
+  const verdict = parsedRedFlags.length > 2 || parsedRiskMatrix.high.length > 2 
+    ? "SEEK_COUNSEL" 
+    : parsedRedFlags.length > 0 ? "NEGOTIATE" : "SIGN";
+
+  return {
+    verdict,
+    contractType: contractType || "other",
+    executiveSummary: safeData.summary || "The contract has been analyzed. See the risk matrix and red flags below.",
+    riskMatrix: parsedRiskMatrix,
+    redFlags: parsedRedFlags,
+    recommendations: [
+      {
+        id: "rec-1",
+        forAttorneys: "Review the identified high-severity clauses and ensure indemnification caps are appropriate.",
+        forIndividuals: "Consider asking for clarification on the highlighted red flags before signing.",
+      }
+    ],
+    appendix: {
+      glossary: [],
+      legalReferences: [],
+      benchmarks: [],
+    },
   };
 }
 
@@ -253,7 +348,11 @@ export default function ChatPage() {
               updateMessage(convId, reportMsgId, { content: reportContent, isStreaming: true });
             }
           } else if (ev === "done") {
-            updateMessage(convId, reportMsgId, { isStreaming: false });
+            const contractReport = parseBackendReport(data.risk_analysis, contractType);
+            updateMessage(convId, reportMsgId, { 
+              isStreaming: false, 
+              report: contractReport 
+            });
             updateConversation(convId, (c) => ({ ...c, contractType }));
           } else if (ev === "error") {
             const errMsg = data.message as string;
@@ -378,7 +477,7 @@ export default function ChatPage() {
         const resp = await chatApi.send({
           message: `I want to analyze a ${CONTRACT_TYPE_LABELS[type]}.`,
           conversation_id: convId,
-          user_type: userType,
+          userType,
           contract_type: type,
         });
         addMessage(convId, apiMsgToLocal(resp.message));

@@ -5,30 +5,44 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from app.services.pubsub import get_subscriber
 from app.core.config import settings
 
+from jwt import PyJWKClient
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
+# Initialize JWK client with caching
+jwks_client = PyJWKClient(settings.CLERK_JWKS_URL)
+
 async def verify_clerk_token(token: str) -> str:
     """
-    Validate the Clerk JWT token.
-    In production, you should fetch the JWKS from your Clerk Frontend API
-    and verify the RS256 signature.
+    Validate the Clerk JWT token using RS256 signature verification.
     """
     if not token:
         raise ValueError("No token provided")
     
     try:
-        # Decode the token. For robust production use, pass the public key and algorithms=["RS256"]
-        # Since we don't have the dynamic JWKS URL cached here, we extract the 'sub' (user ID).
-        payload = jwt.decode(token, options={"verify_signature": False})
+        # Get the signing key from the JWKS endpoint
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        
+        # Decode and verify the token
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=settings.CLERK_ISSUER,
+        )
+        
         user_id = payload.get("sub")
         if not user_id:
             raise ValueError("Token does not contain a user ID (sub).")
         return user_id
-    except jwt.DecodeError:
-        raise ValueError("Invalid JWT token format.")
+    except jwt.ExpiredSignatureError:
+        raise ValueError("Token has expired.")
+    except jwt.InvalidTokenError as e:
+        raise ValueError(f"Invalid token: {str(e)}")
     except Exception as e:
+        logger.error(f"Unexpected error during token validation: {e}")
         raise ValueError(f"Token validation failed: {str(e)}")
 
 

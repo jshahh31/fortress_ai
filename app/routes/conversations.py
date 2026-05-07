@@ -1,9 +1,10 @@
 """Conversation CRUD routes."""
 
 import uuid
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from app.db.store import store
+from app.core.auth import get_current_user
 from app.schemas.chat import (
     ConversationCreateRequest,
     ConversationUpdateRequest,
@@ -16,17 +17,18 @@ router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
 @router.get("", response_model=list[ConversationSummaryOut])
-async def list_conversations():
+async def list_conversations(user_id: str = Depends(get_current_user)):
     """List all conversations (pinned first, then by timestamp desc)."""
-    return await store.list_conversations()
+    return await store.list_conversations(user_id=user_id)
 
 
 @router.post("", response_model=ConversationOut, status_code=201)
-async def create_conversation(req: ConversationCreateRequest):
+async def create_conversation(req: ConversationCreateRequest, user_id: str = Depends(get_current_user)):
     """Create a new conversation."""
     conv_id = uuid.uuid4().hex[:12]
     conv = await store.create_conversation(
         id=conv_id,
+        user_id=user_id,
         title=req.title or "New Analysis",
         contract_type=req.contract_type.value if req.contract_type else None,
         user_type=req.user_type.value if req.user_type else None,
@@ -35,19 +37,20 @@ async def create_conversation(req: ConversationCreateRequest):
 
 
 @router.get("/{conversation_id}", response_model=ConversationOut)
-async def get_conversation(conversation_id: str):
+async def get_conversation(conversation_id: str, user_id: str = Depends(get_current_user)):
     """Get a conversation with all messages."""
-    conv = await store.get_conversation(conversation_id)
+    conv = await store.get_conversation(conversation_id, user_id=user_id)
     if conv is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conv
 
 
 @router.patch("/{conversation_id}", response_model=ConversationOut)
-async def update_conversation(conversation_id: str, req: ConversationUpdateRequest):
+async def update_conversation(conversation_id: str, req: ConversationUpdateRequest, user_id: str = Depends(get_current_user)):
     """Rename or pin/unpin a conversation."""
     conv = await store.update_conversation(
         id=conversation_id,
+        user_id=user_id,
         title=req.title,
         is_pinned=req.is_pinned,
     )
@@ -57,9 +60,9 @@ async def update_conversation(conversation_id: str, req: ConversationUpdateReque
 
 
 @router.delete("/{conversation_id}", response_model=SuccessResponse)
-async def delete_conversation(conversation_id: str):
+async def delete_conversation(conversation_id: str, user_id: str = Depends(get_current_user)):
     """Delete a conversation."""
-    deleted = await store.delete_conversation(conversation_id)
+    deleted = await store.delete_conversation(conversation_id, user_id=user_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return SuccessResponse(message="Conversation deleted")

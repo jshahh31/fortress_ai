@@ -18,6 +18,11 @@ class Settings(BaseSettings):
         return "Qwen/Qwen3.6-27B"
 
     LOCAL_API_KEY: str = "dummy-key"
+    TAVILY_API_KEY: str = ""
+    HUGGING_FACE_HUB_TOKEN: str = ""
+
+    LLM_TIMEOUT_SECONDS: int = 60
+    LLM_MAX_RETRIES: int = 3
 
     # ── Qdrant (future RAG) ──────────────────────────────────
     QDRANT_URL: str = "http://localhost:6333"
@@ -30,6 +35,10 @@ class Settings(BaseSettings):
     # ── File uploads ──────────────────────────────────────────
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE_MB: int = 25
+
+    # ── Clerk Authentication ──────────────────────────────────
+    CLERK_JWKS_URL: str = "https://your-app.clerk.accounts.dev/.well-known/jwks.json"
+    CLERK_ISSUER: str = "https://your-app.clerk.accounts.dev"
 
     model_config = SettingsConfigDict(
         env_file=".env",
