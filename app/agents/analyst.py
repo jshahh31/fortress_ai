@@ -44,7 +44,7 @@ class LegalRiskAnalyst:
         }
     
     def _build_structure_aware_prompt(self, state: AgentState, parsed_doc) -> str:
-        """Build prompt requiring structure-aware analysis."""
+        """Build prompt requiring structure-aware analysis with PDF-extracted sections only."""
         query = state.get("original_query", "")
         research = state.get("research_report", "")
         context = state.get("merged_context", "")
@@ -54,13 +54,27 @@ class LegalRiskAnalyst:
         
         # Get key clauses summary
         key_clauses_text = self._format_key_clauses(parsed_doc)
-        
+
+        # PHASE 4: Create explicit list of valid sections from PDF
+        valid_sections = sorted(parsed_doc.section_map.keys())
+        sections_list = "\n".join([
+            f"  - {sec}: {parsed_doc.section_map[sec].title} (Page {parsed_doc.section_map[sec].page_num})"
+            for sec in valid_sections[:20]  # Show first 20 to avoid overwhelming prompt
+        ])
+
+        if len(valid_sections) > 20:
+            sections_list += f"\n  - ...and {len(valid_sections) - 20} more sections"
+
         return f"""
 You are a Senior Legal Risk Analyst analyzing a contract with full document structure awareness.
 
 {doc_overview}
 
 {key_clauses_text}
+
+=== VALID SECTIONS FROM THIS PDF DOCUMENT ===
+ONLY use these exact section references in your findings:
+{sections_list}
 
 QUERY: {query}
 
@@ -70,12 +84,12 @@ RESEARCH FINDINGS:
 DOCUMENT CONTEXT:
 {context[:3000]}
 
-CRITICAL REQUIREMENTS - YOU MUST FOLLOW THESE:
+=== CRITICAL REQUIREMENTS - YOU MUST FOLLOW THESE ===
 
-1. **SECTION REFERENCES ARE MANDATORY**
-   - Every finding MUST reference the exact section number (e.g., "3.2", "7.1")
-   - Include the PAGE NUMBER where the section appears
-   - Quote SPECIFIC contract language being analyzed
+1. **USE ONLY PDF-EXTRACTED SECTIONS**
+   - Every finding MUST reference one of the valid sections listed above
+   - Section number MUST match exactly (e.g., "3.2" not "3.2.0" or "Section 3.2")
+   - Page number MUST match the PDF-extracted page for that section
 
 2. **RISK JUSTIFICATION REQUIRED**
    - Explain WHY you assigned each risk level (High/Medium/Low)
@@ -87,13 +101,15 @@ CRITICAL REQUIREMENTS - YOU MUST FOLLOW THESE:
    - Don't use generic advice like "review with counsel"
    - Suggest specific alternative wording when possible
 
-4. **NO DUPLICATES**
-   - Each section should appear only once
-   - If multiple issues in one section, combine them into a single comprehensive finding
+4. **STRICT VALIDATION ENFORCEMENT**
+   - Findings with invalid sections will be REJECTED
+   - Findings without exact PDF quotes will be REJECTED
+   - Findings with wrong page numbers will be REJECTED
 
-5. **PRIORITIZATION**
-   - Assign priority 1-5 (1 = most urgent)
-   - Consider: risk level, business impact, ease of remediation
+5. **NO INVENTED SECTIONS**
+   - Do NOT create section references that don't exist in the PDF
+   - Do NOT modify the section numbers or titles
+   - Use ONLY the sections provided in the VALID SECTIONS list
 
 OUTPUT FORMAT (JSON):
 {{
@@ -113,7 +129,11 @@ OUTPUT FORMAT (JSON):
   ]
 }}
 
-REMEMBER: Generic findings without section references will be rejected. Be specific and actionable.
+=== IMPORTANT NOTES ===
+- ALL section references MUST come from the VALID SECTIONS list above
+- ALL contract_text MUST be exact quotes from the specified PDF section
+- ANY deviation will cause the finding to be rejected
+- Use the document structure provided - do NOT invent your own sections
 """
     
     def _build_basic_prompt(self, query: str, research: str, context: str) -> str:
@@ -199,7 +219,7 @@ Return ONLY a JSON object with this structure:
         ])
     
     def _parse_and_validate_response(self, response: str, parsed_doc) -> Dict:
-        """Parse response and validate section references."""
+        """Parse response and validate section references with strict enforcement."""
         try:
             # Clean response
             clean_response = response.strip()
@@ -207,18 +227,68 @@ Return ONLY a JSON object with this structure:
                 clean_response = clean_response[7:-3].strip()
             elif clean_response.startswith("```"):
                 clean_response = clean_response[3:-3].strip()
-            
+
             analysis = json.loads(clean_response)
-            
-            # Validate section references if document structure available
+
+            # PHASE 3: Strict validation of section references
             if parsed_doc and "findings" in analysis:
-                errors = validate_section_references(analysis, parsed_doc)
-                if errors:
-                    analysis["validation_errors"] = errors
-                    logger.warning(f"Section reference validation errors: {errors}")
-            
+                # Track findings with missing/invalid section references
+                validated_findings = []
+                validation_errors = []
+
+                for finding in analysis["findings"]:
+                    section_ref = finding.get("section")
+                    page_num = finding.get("page")
+                    contract_text = finding.get("contract_text")
+
+                    # PHASE 4: Enforce mandatory section references
+                    if not section_ref:
+                        validation_errors.append(
+                            f"Finding missing section reference: {finding.get('title', 'Untitled')}"
+                        )
+                        logger.warning(f"Rejecting finding without section reference: {finding.get('title', 'Untitled')}")
+                        continue
+
+                    # Validate section exists in document
+                    if section_ref and hasattr(parsed_doc, 'section_map') and section_ref not in parsed_doc.section_map:
+                        validation_errors.append(
+                            f"Invalid section reference '{section_ref}' in finding: {finding.get('title', 'Untitled')}"
+                        )
+                        # Still include but mark as invalid
+                        if 'validation_errors' not in finding:
+                            finding['validation_errors'] = []
+                        finding['validation_errors'].append(f"Section {section_ref} not found in document")
+
+                    # Validate page number if section reference exists
+                    if section_ref and not page_num:
+                        validation_errors.append(
+                            f"Finding for section {section_ref} missing page number: {finding.get('title', 'Untitled')}"
+                        )
+                        if 'validation_errors' not in finding:
+                            finding['validation_errors'] = []
+                        finding['validation_errors'].append("Missing page number")
+
+                    # Validate contract text if section reference exists
+                    if section_ref and not contract_text:
+                        validation_errors.append(
+                            f"Finding for section {section_ref} missing contract text: {finding.get('title', 'Untitled')}"
+                        )
+                        if 'validation_errors' not in finding:
+                            finding['validation_errors'] = []
+                        finding['validation_errors'].append("Missing specific contract language")
+
+                    validated_findings.append(finding)
+
+                # Update analysis with validated findings
+                analysis["findings"] = validated_findings
+
+                # Add validation summary
+                if validation_errors:
+                    analysis["validation_errors"] = validation_errors
+                    logger.warning(f"Section reference validation errors: {validation_errors}")
+
             return analysis
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse analysis JSON: {e}")
             return {

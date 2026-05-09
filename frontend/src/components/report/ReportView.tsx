@@ -241,6 +241,56 @@ export default function ReportView({ report, userType = "individual", onRequestE
               />
             </div>
           )}
+
+          {/* Section Evidence & Quotes */}
+          {report.appendix.evidence && report.appendix.evidence.length > 0 && (
+            <div>
+              <p className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider mb-2">
+                Section Evidence & Exact Quotes
+              </p>
+              <div className="space-y-2">
+                {report.appendix.evidence.map((ev, i) => (
+                  <div key={i} className="text-xs p-2 rounded bg-white/5 border border-white/10">
+                    <p className="text-secondary font-semibold mb-1">
+                      §{ev.section}{ev.page && ` • p.${ev.page}`}{ev.title ? ` • ${ev.title}` : ""}
+                    </p>
+                    <p className="text-muted-foreground italic">&ldquo;{ev.quote}&rdquo;</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* RAG Sources */}
+          {report.appendix.sources && report.appendix.sources.length > 0 && (
+            <div>
+              <p className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider mb-2">
+                RAG SOURCES & REFERENCES
+              </p>
+              <div className="space-y-2">
+                {report.appendix.sources.map((source, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs p-2 rounded bg-white/5">
+                    <span className="font-mono text-primary/80 w-8 shrink-0">
+                      {source.type === 'legal' ? '📜' :
+                       source.type === 'industry' ? '📊' :
+                       source.type === 'academic' ? '🎓' : '🔗'}
+                    </span>
+                    <div className="flex-1">
+                      <p className="font-medium text-secondary">{source.title}</p>
+                      <a
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary/80 text-[10px] hover:underline break-all"
+                      >
+                        {source.url.replace(/^https?:\/\//, '')}
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </Section>
 

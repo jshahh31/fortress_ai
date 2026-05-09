@@ -82,6 +82,8 @@ export interface Appendix {
   glossary: { term: string; definition: string }[];
   legalReferences: { title: string; citation: string }[];
   benchmarks: { metric: string; value: string; comparison: string }[];
+  evidence?: { section: string; page?: number; quote: string; title?: string }[];
+  sources?: { title: string; url: string; type?: string }[];
 }
 
 export interface ContractReport {

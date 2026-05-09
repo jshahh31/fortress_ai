@@ -48,7 +48,8 @@ def get_section_context(parsed: ParsedDocument, section_ref: str) -> Optional[Di
 
 def validate_section_references(analysis: Dict, parsed: ParsedDocument) -> List[str]:
     """
-    Validate all section references in analysis exist in document.
+    PHASE 4: Strict validation that ALL section references come from the PDF document structure.
+    Rejects any findings with invalid, missing, or non-PDF-based section references.
 
     Args:
         analysis: Risk analysis dictionary
@@ -58,22 +59,57 @@ def validate_section_references(analysis: Dict, parsed: ParsedDocument) -> List[
         List of error messages for invalid references
     """
     if not parsed or not hasattr(parsed, 'section_map') or not parsed.section_map:
-        return ["Document has no section map for validation"]
+        return ["CRITICAL: Document has no section map for validation - all findings require valid PDF section references"]
 
     errors = []
     findings = analysis.get("findings", [])
+    valid_sections = set(parsed.section_map.keys())
 
     for i, finding in enumerate(findings, 1):
         section_ref = finding.get("section")
-        if section_ref and section_ref not in parsed.section_map:
-            errors.append(f"Finding {i}: Invalid section reference '{section_ref}'")
-
-        # Validate page number if provided
         page_num = finding.get("page")
-        if page_num and section_ref and section_ref in parsed.section_map:
-            actual_page = parsed.section_map[section_ref].page_num
-            if page_num != actual_page:
-                errors.append(f"Finding {i}: Page mismatch for section {section_ref} (stated: {page_num}, actual: {actual_page})")
+        contract_text = finding.get("contract_text")
+        title = finding.get("title", "Untitled")
+
+        # PHASE 4: Section reference is MANDATORY - no exceptions
+        if not section_ref:
+            errors.append(
+                f"CRITICAL {i}: Finding '{title}' missing section reference - "
+                f"ALL findings must reference a specific PDF section. "
+                f"Available sections: {sorted(valid_sections)[:5]}..."
+            )
+            continue  # Skip further validation for this finding
+
+        # PHASE 4: Section MUST exist in the extracted PDF structure
+        if section_ref not in valid_sections:
+            errors.append(
+                f"CRITICAL {i}: Invalid section reference '{section_ref}' in finding '{title}' - "
+                f"this section was NOT found in the PDF document. "
+                f"Available sections: {sorted(valid_sections)[:5]}..."
+            )
+            continue  # Skip further validation for this finding
+
+        # PHASE 4: Page number must match the PDF-extracted section
+        actual_section = parsed.section_map[section_ref]
+        if page_num and page_num != actual_section.page_num:
+            errors.append(
+                f"CRITICAL {i}: Page number mismatch for section {section_ref} in '{title}' - "
+                f"stated page {page_num} but PDF shows page {actual_section.page_num}"
+            )
+
+        # PHASE 4: Contract text must be provided for specific analysis
+        if not contract_text:
+            errors.append(
+                f"CRITICAL {i}: Missing contract text for section {section_ref} in '{title}' - "
+                f"must quote the EXACT language from the PDF document"
+            )
+
+        # PHASE 4: Verify the contract text actually comes from this section
+        if contract_text and actual_section.content and contract_text not in actual_section.content:
+            errors.append(
+                f"CRITICAL {i}: Contract text mismatch for section {section_ref} in '{title}' - "
+                f"the quoted text was not found in this PDF section"
+            )
 
     return errors
 

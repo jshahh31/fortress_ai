@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import AsyncGenerator, Dict, Any, List
 
 from app.agents.graph import multi_agent_graph
@@ -73,6 +74,7 @@ async def run_pipeline(
         current_node = None
         final_risk_analysis = {}
         final_report = ""
+        final_sources = []
         
         async for output in multi_agent_graph.astream(initial_state):
             # output is a dict where keys are node names and values are the state updates
@@ -98,6 +100,7 @@ async def run_pipeline(
                 
                 elif node_name == "researcher":
                     content = state_update.get("research_report", "")
+                    final_sources = state_update.get("sources", [])
                     yield _sse({"event": "content_chunk", "data": {"chunk": content, "step_id": "researcher"}})
                 
                 elif node_name == "analyst":
@@ -106,18 +109,51 @@ async def run_pipeline(
                     
                     # Apply deduplication and validation if document structure available
                     if parsed_doc and "findings" in risk_json:
-                        risk_json["findings"] = _deduplicate_findings(
-                            risk_json["findings"],
-                            parsed_doc
+                        # Canonicalize section references and page numbers from PDF map first.
+                        risk_json["findings"] = _normalize_and_enrich_findings(
+                            risk_json.get("findings", []),
+                            parsed_doc,
                         )
-                        
-                        # Add validation and coverage metrics
+
+                        # PHASE 4: Strict validation before deduplication
                         validation_errors = validate_section_references(risk_json, parsed_doc)
+        
+                        # PHASE 4: Filter out findings with critical validation errors
+                        if validation_errors:
+                            logger.warning(f"Validation errors found: {validation_errors}")
+                            valid_findings = []
+                            for finding in risk_json["findings"]:
+                                # Only keep findings that pass validation
+                                section_ref = finding.get("section")
+                                if not section_ref:
+                                    continue  # Skip findings without sections
+        
+                                # Check if this finding has validation errors
+                                finding_has_errors = False
+                                for error in validation_errors:
+                                    if f"'{section_ref}'" in error or f"section {section_ref}" in error.lower():
+                                        finding_has_errors = True
+                                        break
+        
+                                if not finding_has_errors:
+                                    valid_findings.append(finding)
+        
+                            risk_json["findings"] = valid_findings
+                            logger.info(f"Filtered findings: {len(risk_json['findings'])} valid after validation")
+                        else:
+                            # No validation errors - proceed with deduplication
+                            risk_json["findings"] = _deduplicate_findings(
+                                risk_json["findings"],
+                                parsed_doc
+                            )
+        
+                        # Add validation and coverage metrics
                         coverage = calculate_coverage_metrics(risk_json, parsed_doc)
-                        
+        
                         risk_json["validation"] = {
                             "errors": validation_errors,
-                            "coverage": coverage
+                            "coverage": coverage,
+                            "status": "valid" if not validation_errors else "invalid"
                         }
                     
                     final_risk_analysis = risk_json
@@ -134,7 +170,14 @@ async def run_pipeline(
             yield _sse({"event": "step_update", "data": {"step_id": current_node, "status": "completed"}})
 
         # Send the final 'done' event with the full report
-        yield _sse({"event": "done", "data": {"risk_analysis": final_risk_analysis, "report": final_report}})
+        yield _sse({
+            "event": "done",
+            "data": {
+                "risk_analysis": final_risk_analysis,
+                "report": final_report,
+                "sources": final_sources,
+            },
+        })
 
     except Exception as e:
         logger.error(f"Pipeline execution failed: {e}")
@@ -149,32 +192,46 @@ def _sse(payload: dict) -> str:
 
 def _deduplicate_findings(findings: List[dict], parsed_doc) -> List[dict]:
     """
-    Remove duplicate findings for same sections.
-    
+    Remove duplicate findings for same sections and enforce section references.
+
     Args:
         findings: List of finding dictionaries
         parsed_doc: ParsedDocument with section map
-        
+
     Returns:
-        Deduplicated list of findings
+        Deduplicated list of findings with validated section references
     """
     if not findings:
         return findings
-    
+
     seen = {}
     deduplicated = []
-    
+    section_map = parsed_doc.section_map if parsed_doc else {}
+
     for finding in findings:
         section_ref = finding.get("section")
+
+        # PHASE 3: Enforce section references - don't allow findings without them
         if not section_ref:
-            # Keep findings without section references
-            deduplicated.append(finding)
+            logger.warning(f"Finding without section reference: {finding.get('title', 'Untitled')}")
+            # Add validation error and skip this finding
+            if 'validation_errors' not in finding:
+                finding['validation_errors'] = []
+            finding['validation_errors'].append("Missing section reference")
             continue
-        
+
+        # PHASE 4: Validate section exists in document structure
+        if section_ref and section_ref not in section_map:
+            logger.warning(f"Invalid section reference: {section_ref}")
+            if 'validation_errors' not in finding:
+                finding['validation_errors'] = []
+            finding['validation_errors'].append(f"Section {section_ref} not found in document")
+            # Still include it but mark as invalid
+
         # Use section + title (normalized) as unique key
         title = finding.get("title", "").lower().strip()
         key = (section_ref.lower(), title)
-        
+
         if key not in seen:
             seen[key] = finding
             deduplicated.append(finding)
@@ -187,9 +244,73 @@ def _deduplicate_findings(findings: List[dict], parsed_doc) -> List[dict]:
                 deduplicated[idx] = finding
                 seen[key] = finding
                 logger.info(f"Replaced duplicate finding for {section_ref} with higher risk version")
-    
+
     logger.info(f"Deduplication: {len(findings)} -> {len(deduplicated)} findings")
     return deduplicated
+
+
+def _normalize_and_enrich_findings(findings: List[dict], parsed_doc) -> List[dict]:
+    """
+    Normalize finding section references and align page values to PDF-extracted sections.
+    """
+    if not findings or not parsed_doc or not getattr(parsed_doc, "section_map", None):
+        return findings
+
+    normalized: List[dict] = []
+    section_map = parsed_doc.section_map
+
+    for finding in findings:
+        item = dict(finding)
+        raw_section = item.get("section")
+        canonical_section = _resolve_section_ref(raw_section, section_map)
+
+        if canonical_section:
+            item["section"] = canonical_section
+            section = section_map.get(canonical_section)
+            if section is not None:
+                # Always trust PDF structure as source of truth for page mapping.
+                item["page"] = section.page_num
+
+        normalized.append(item)
+
+    return normalized
+
+
+def _resolve_section_ref(section_ref: Any, section_map: Dict[str, Any]) -> str | None:
+    """
+    Resolve a model-provided section reference to a canonical section number from section_map.
+    Handles forms like "Section 3.2" and "3.2 Payment Terms".
+    """
+    if not section_ref:
+        return None
+
+    text = str(section_ref).strip()
+    if not text:
+        return None
+
+    # Direct hit.
+    if text in section_map:
+        sec = section_map[text]
+        return getattr(sec, "number", text)
+
+    lowered = text.lower()
+    if lowered in section_map:
+        sec = section_map[lowered]
+        return getattr(sec, "number", lowered)
+
+    # Extract numeric section token from longer text.
+    match = re.search(r"\b(\d+(?:\.\d+)*)\b", text)
+    if match:
+        token = match.group(1)
+        if token in section_map:
+            sec = section_map[token]
+            return getattr(sec, "number", token)
+        token_lower = token.lower()
+        if token_lower in section_map:
+            sec = section_map[token_lower]
+            return getattr(sec, "number", token_lower)
+
+    return None
 
 
 def _compare_risk_level(a: str, b: str) -> int:

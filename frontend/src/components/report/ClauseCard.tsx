@@ -42,10 +42,10 @@ export default function ClauseCard({ item, index }: ClauseCardProps) {
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-white/5 transition-colors"
       >
-        <span className="text-sm font-mono text-secondary/80 bg-white/10 px-1.5 py-0.5 rounded shrink-0">
+        <span className="text-sm font-mono text-primary font-medium shrink-0">
           §{item.section}{item.page && ` • p.${item.page}`}
         </span>
-        <span className="text-sm font-semibold text-secondary flex-1 truncate">
+        <span className="text-sm font-semibold text-secondary flex-1">
           {item.clause}
         </span>
         {item.priority && (
@@ -79,24 +79,24 @@ export default function ClauseCard({ item, index }: ClauseCardProps) {
             className="overflow-hidden"
           >
             <div className="px-4 pb-4 space-y-4 border-t border-white/5 pt-4">
-              {/* Contract text (Phase 2) or Original text */}
+              {/* Specific Contract Quotes - Exact problematic language */}
               {(item.contract_text || item.originalText) && (
                 <div>
-                  <p className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider mb-1.5">
-                    Contract Language
+                  <p className="text-[10px] font-mono font-bold uppercase text-primary tracking-wider mb-1.5">
+                    SPECIFIC CONTRACT LANGUAGE
                   </p>
-                  <div className="bg-white/5 rounded-lg p-3 border border-white/5">
-                    <p className="text-xs text-secondary/80 leading-relaxed italic">
-                      "{item.contract_text || item.originalText}"
+                  <div className="bg-primary/5 rounded-lg p-3 border border-primary/20">
+                    <p className="text-sm text-secondary font-medium leading-relaxed">
+                      &ldquo;{item.contract_text || item.originalText}&rdquo;
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* Risk description */}
+              {/* Risk description with section reference */}
               <div>
                 <p className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider mb-1.5">
-                  Risk Assessment
+                  {item.section && `SECTION §${item.section}`} RISK ASSESSMENT
                 </p>
                 <p className="text-sm text-secondary leading-relaxed">
                   {item.description}
