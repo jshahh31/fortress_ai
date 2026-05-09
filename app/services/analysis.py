@@ -16,10 +16,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import AsyncGenerator, Dict, Any
+from typing import AsyncGenerator, Dict, Any, List
 
 from app.agents.graph import multi_agent_graph
 from app.agents.state import AgentState
+from app.services.section_utils import (
+    validate_section_references,
+    calculate_coverage_metrics
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +102,24 @@ async def run_pipeline(
                 
                 elif node_name == "analyst":
                     risk_json = state_update.get("risk_analysis", {})
+                    parsed_doc = state_update.get("parsed_document")
+                    
+                    # Apply deduplication and validation if document structure available
+                    if parsed_doc and "findings" in risk_json:
+                        risk_json["findings"] = _deduplicate_findings(
+                            risk_json["findings"],
+                            parsed_doc
+                        )
+                        
+                        # Add validation and coverage metrics
+                        validation_errors = validate_section_references(risk_json, parsed_doc)
+                        coverage = calculate_coverage_metrics(risk_json, parsed_doc)
+                        
+                        risk_json["validation"] = {
+                            "errors": validation_errors,
+                            "coverage": coverage
+                        }
+                    
                     final_risk_analysis = risk_json
                     content = json.dumps(risk_json, indent=2)
                     yield _sse({"event": "content_chunk", "data": {"chunk": content, "step_id": "analyst"}})
@@ -123,3 +145,59 @@ async def run_pipeline(
 def _sse(payload: dict) -> str:
     """Format a dict as an SSE data line."""
     return f"data: {json.dumps(payload)}\n\n"
+
+
+def _deduplicate_findings(findings: List[dict], parsed_doc) -> List[dict]:
+    """
+    Remove duplicate findings for same sections.
+    
+    Args:
+        findings: List of finding dictionaries
+        parsed_doc: ParsedDocument with section map
+        
+    Returns:
+        Deduplicated list of findings
+    """
+    if not findings:
+        return findings
+    
+    seen = {}
+    deduplicated = []
+    
+    for finding in findings:
+        section_ref = finding.get("section")
+        if not section_ref:
+            # Keep findings without section references
+            deduplicated.append(finding)
+            continue
+        
+        # Use section + title (normalized) as unique key
+        title = finding.get("title", "").lower().strip()
+        key = (section_ref.lower(), title)
+        
+        if key not in seen:
+            seen[key] = finding
+            deduplicated.append(finding)
+        else:
+            # Keep the higher risk version
+            existing = seen[key]
+            if _compare_risk_level(finding.get("risk", "Medium"), existing.get("risk", "Medium")) > 0:
+                # Replace with higher risk version
+                idx = deduplicated.index(existing)
+                deduplicated[idx] = finding
+                seen[key] = finding
+                logger.info(f"Replaced duplicate finding for {section_ref} with higher risk version")
+    
+    logger.info(f"Deduplication: {len(findings)} -> {len(deduplicated)} findings")
+    return deduplicated
+
+
+def _compare_risk_level(a: str, b: str) -> int:
+    """
+    Compare risk levels.
+    
+    Returns:
+        Positive if a > b, negative if a < b, 0 if equal
+    """
+    levels = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+    return levels.get(a, 0) - levels.get(b, 0)

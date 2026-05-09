@@ -43,6 +43,14 @@ export interface RiskItem {
   suggestion?: string;
   industryStandard?: string;
   originalText?: string;
+  
+  // Phase 2 fields
+  page?: number;                    // Page number where section appears
+  justification?: string;           // Detailed risk reasoning
+  contract_text?: string;           // Specific contract language (replaces originalText)
+  priority?: number;                // Priority ranking 1-5 (1 = most urgent)
+  related_sections?: string[];      // Related section numbers
+  clause_type?: string;             // Clause classification (payment, liability, etc.)
 }
 
 export interface RiskMatrix {
@@ -84,6 +92,25 @@ export interface ContractReport {
   redFlags: RedFlag[];
   recommendations: Recommendation[];
   appendix: Appendix;
+  
+  // Phase 2 fields
+  validation?: {
+    errors?: string[];
+    coverage?: {
+      total_sections: number;
+      analyzed_sections: number;
+      section_coverage_pct: number;
+      key_clause_sections: number;
+      covered_key_sections: number;
+      key_clause_coverage_pct: number;
+      missing_key_clauses?: Array<{
+        section: string;
+        title: string;
+        type: string;
+        page: number;
+      }>;
+    };
+  };
 }
 
 // ─── Analysis Pipeline ─────────────────────────────────────

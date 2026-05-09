@@ -37,6 +37,19 @@ class PrismaStore:
         if self.prisma.is_connected():
             await self.prisma.disconnect()
 
+    async def _ensure_user_exists(self, user_id: str) -> None:
+        """Create a lightweight local user record when auth is bypassed in development."""
+        existing = await self.prisma.user.find_unique(where={"id": user_id})
+        if existing:
+            return
+
+        await self.prisma.user.create(
+            data={
+                "id": user_id,
+                "email": f"{user_id}@local.fortress",
+            }
+        )
+
     # ── Conversations ────────────────────────────────────────
 
     async def create_conversation(
@@ -47,6 +60,8 @@ class PrismaStore:
         contract_type: Optional[str] = None,
         user_type: Optional[str] = None,
     ) -> ConversationOut:
+        await self._ensure_user_exists(user_id)
+
         conv = await self.prisma.conversation.create(
             data={
                 "id": id,

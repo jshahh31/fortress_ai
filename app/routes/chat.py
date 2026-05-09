@@ -286,13 +286,24 @@ async def stream_audit(req: ChatRequest, user_id: str = Depends(get_current_user
 
         uploaded_segments.append(msg.content[marker_pos + len(marker):])
 
-    uploaded_text = "\n\n".join(seg for seg in uploaded_segments if seg.strip())
+    # Use only the latest uploaded document segment to avoid unbounded growth
+    # when users upload multiple revisions in one conversation.
+    uploaded_text = ""
+    for seg in reversed(uploaded_segments):
+        if seg.strip():
+            uploaded_text = seg
+            break
     if uploaded_text.endswith("..."):
         uploaded_text = uploaded_text[:-3].rstrip()
 
     pipeline_text = req.message
     if uploaded_text.strip():
         pipeline_text = uploaded_text
+
+    # Keep LLM calls bounded to reduce timeout risk on very large documents.
+    MAX_PIPELINE_CHARS = 30000
+    if len(pipeline_text) > MAX_PIPELINE_CHARS:
+        pipeline_text = pipeline_text[:MAX_PIPELINE_CHARS]
 
     # Guardrail: prevent running the full pipeline on tiny non-document prompts.
     if not uploaded_text.strip() and len((req.message or "").strip()) < 300:

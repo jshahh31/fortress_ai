@@ -30,7 +30,9 @@ from app.db.store import store
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("🏰 Fortress AI backend starting...")
-    logger.info(f"   Qwen endpoint:  {settings.QWEN_API_BASE} ({settings.QWEN_MODEL})")
+    logger.info(
+        f"   LLM endpoint:   {settings.llm_api_base} ({settings.llm_model}) provider={settings.LLM_PROVIDER}"
+    )
     logger.info(f"   CORS origin:    {settings.FRONTEND_URL}")
 
     # Ensure upload directory exists

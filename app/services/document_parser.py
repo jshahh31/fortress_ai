@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import io
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple
 
 from app.core.config import settings
+from app.services.document_structure import DocumentStructureBuilder, Section
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +43,16 @@ class ParsedDocument:
     tables: List[TableData]
     metadata: Dict[str, Any]
     page_count: int
+    sections: List[Section] = field(default_factory=list)
+    section_map: Dict[str, Section] = field(default_factory=dict)
+    structure: Dict[str, Any] = field(default_factory=dict)
 
 
 class DocumentParser:
     """Hybrid PDF parser with PyMuPDF primary and PyPDF2 fallback."""
+
+    def __init__(self) -> None:
+        self._structure_builder = DocumentStructureBuilder()
 
     def parse_pdf(self, pdf_bytes: bytes, extract_tables: bool = False) -> ParsedDocument:
         if settings.USE_PYMUPDF:
@@ -109,12 +116,18 @@ class DocumentParser:
                 text_parts.append("=== TABLES DETECTED ===")
                 text_parts.append(self._format_tables(tables))
 
+        sections, section_map, structure = self._structure_builder.build(blocks)
+        metadata["document_structure"] = structure
+
         return ParsedDocument(
             text="\n\n".join(part for part in text_parts if part.strip()),
             blocks=blocks,
             tables=tables,
             metadata=metadata,
             page_count=page_count,
+            sections=sections,
+            section_map=section_map,
+            structure=structure,
         )
 
     def _parse_with_pypdf2(self, pdf_bytes: bytes) -> ParsedDocument:
@@ -127,6 +140,9 @@ class DocumentParser:
                 tables=[],
                 metadata={},
                 page_count=0,
+                sections=[],
+                section_map={},
+                structure={},
             )
 
         try:
@@ -139,6 +155,9 @@ class DocumentParser:
                 tables=[],
                 metadata={},
                 page_count=0,
+                sections=[],
+                section_map={},
+                structure={},
             )
 
         text_parts: List[str] = []
@@ -164,12 +183,17 @@ class DocumentParser:
             )
 
         metadata = dict(getattr(reader, "metadata", {}) or {})
+        sections, section_map, structure = self._structure_builder.build(blocks)
+        metadata["document_structure"] = structure
         return ParsedDocument(
             text="\n\n".join(text_parts),
             blocks=blocks,
             tables=[],
             metadata=metadata,
             page_count=len(reader.pages),
+            sections=sections,
+            section_map=section_map,
+            structure=structure,
         )
 
     @staticmethod

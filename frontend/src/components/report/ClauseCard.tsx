@@ -42,12 +42,22 @@ export default function ClauseCard({ item, index }: ClauseCardProps) {
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-white/5 transition-colors"
       >
-        <span className="text-xs font-mono text-muted-foreground shrink-0 w-10">
-          §{item.section}
+        <span className="text-sm font-mono text-secondary/80 bg-white/10 px-1.5 py-0.5 rounded shrink-0">
+          §{item.section}{item.page && ` • p.${item.page}`}
         </span>
         <span className="text-sm font-semibold text-secondary flex-1 truncate">
           {item.clause}
         </span>
+        {item.priority && (
+          <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 px-1.5">
+            P{item.priority}
+          </span>
+        )}
+        {item.clause_type && (
+          <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-muted-foreground border border-white/10 shrink-0">
+            {item.clause_type}
+          </span>
+        )}
         <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 ${badge.class}`}>
           {badge.label}
         </span>
@@ -69,15 +79,15 @@ export default function ClauseCard({ item, index }: ClauseCardProps) {
             className="overflow-hidden"
           >
             <div className="px-4 pb-4 space-y-4 border-t border-white/5 pt-4">
-              {/* Original text */}
-              {item.originalText && (
+              {/* Contract text (Phase 2) or Original text */}
+              {(item.contract_text || item.originalText) && (
                 <div>
                   <p className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider mb-1.5">
-                    Original Clause
+                    Contract Language
                   </p>
                   <div className="bg-white/5 rounded-lg p-3 border border-white/5">
                     <p className="text-xs text-secondary/80 leading-relaxed italic">
-                      "{item.originalText}"
+                      "{item.contract_text || item.originalText}"
                     </p>
                   </div>
                 </div>
@@ -92,6 +102,18 @@ export default function ClauseCard({ item, index }: ClauseCardProps) {
                   {item.description}
                 </p>
               </div>
+
+              {/* Risk Justification (Phase 2) */}
+              {item.justification && (
+                <div>
+                  <p className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider mb-1.5">
+                    Risk Justification
+                  </p>
+                  <p className="text-sm text-secondary/90 leading-relaxed">
+                    {item.justification}
+                  </p>
+                </div>
+              )}
 
               {/* Industry standard */}
               {item.industryStandard && (
@@ -127,6 +149,25 @@ export default function ClauseCard({ item, index }: ClauseCardProps) {
                     <p className="text-sm text-secondary leading-relaxed">
                       {item.suggestion}
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Related Sections (Phase 2) */}
+              {item.related_sections && item.related_sections.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-mono font-bold uppercase text-muted-foreground tracking-wider mb-1.5">
+                    Related Sections
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {item.related_sections.map((sec) => (
+                      <span
+                        key={sec}
+                        className="text-xs font-mono px-2 py-1 rounded bg-primary/10 text-primary border border-primary/20"
+                      >
+                        §{sec}
+                      </span>
+                    ))}
                   </div>
                 </div>
               )}

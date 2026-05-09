@@ -77,6 +77,60 @@ export default function ReportView({ report, userType = "individual", onRequestE
         <RiskMatrix matrix={report.riskMatrix} />
       </Section>
 
+      {/* 3.5. Analysis Coverage (Phase 2) */}
+      {report.validation?.coverage && (
+        <Section title="Analysis Coverage" icon={Scale}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+              <p className="text-xs text-muted-foreground mb-1">Sections Analyzed</p>
+              <p className="text-2xl font-bold text-secondary">
+                {report.validation.coverage.analyzed_sections}/{report.validation.coverage.total_sections}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {report.validation.coverage.section_coverage_pct}% coverage
+              </p>
+            </div>
+            
+            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+              <p className="text-xs text-muted-foreground mb-1">Key Clauses</p>
+              <p className="text-2xl font-bold text-secondary">
+                {report.validation.coverage.covered_key_sections}/{report.validation.coverage.key_clause_sections}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {report.validation.coverage.key_clause_coverage_pct}% covered
+              </p>
+            </div>
+          </div>
+          
+          {/* Missing Key Clauses */}
+          {report.validation.coverage.missing_key_clauses && report.validation.coverage.missing_key_clauses.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-mono font-bold uppercase text-muted-foreground tracking-wider mb-2">
+                Key Clauses Not Analyzed
+              </p>
+              <div className="space-y-2">
+                {report.validation.coverage.missing_key_clauses.slice(0, 5).map((clause) => (
+                  <div key={clause.section} className="flex items-center gap-2 text-xs text-muted-foreground p-2 rounded bg-white/5">
+                    <span className="font-mono">§{clause.section}</span>
+                    <span>•</span>
+                    <span className="flex-1">{clause.title}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10">
+                      {clause.type}
+                    </span>
+                    <span className="ml-auto">p.{clause.page}</span>
+                  </div>
+                ))}
+                {report.validation.coverage.missing_key_clauses.length > 5 && (
+                  <p className="text-xs text-muted-foreground/60 italic">
+                    ... and {report.validation.coverage.missing_key_clauses.length - 5} more
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
       {/* 4. Clause-by-Clause Analysis */}
       <Section title="Clause-by-Clause Analysis" icon={FileText}>
         <div className="space-y-2">

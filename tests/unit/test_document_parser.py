@@ -92,3 +92,41 @@ def test_fallback_to_pypdf2(monkeypatch):
 
     result = parser.parse_pdf(b"dummy")
     assert result is expected
+
+
+def test_parse_pdf_extracts_numbered_sections():
+    parser = get_parser()
+    result = parser.parse_pdf(
+        _make_pdf_bytes(
+            ("1. Payment Terms", 16),
+            ("Client shall pay within 60 days.", 11),
+            ("1.1 Late Fees", 14),
+            ("Late fee applies after 10 days.", 11),
+        )
+    )
+
+    assert result.sections
+    assert any(section.number == "1" for section in result.sections)
+    assert any(section.number == "1.1" for section in result.sections)
+    assert "1" in result.section_map
+    assert result.section_map["1"].title.lower().startswith("payment")
+
+
+def test_parse_pdf_builds_structure_hierarchy_and_clause_index():
+    parser = get_parser()
+    result = parser.parse_pdf(
+        _make_pdf_bytes(
+            ("2. Termination", 16),
+            ("Either party may terminate immediately.", 11),
+            ("2.1 Cure Period", 14),
+            ("A 30-day cure period is required.", 11),
+        )
+    )
+
+    hierarchy = result.structure.get("hierarchy", [])
+    key_clauses = result.structure.get("key_clauses", {})
+
+    assert hierarchy
+    assert hierarchy[0]["number"] == "2"
+    assert hierarchy[0]["children"]
+    assert "termination" in key_clauses

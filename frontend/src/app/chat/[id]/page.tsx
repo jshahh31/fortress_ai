@@ -522,6 +522,9 @@ export default function ChatPage() {
       }
 
       if (files && files.length > 0) {
+        let effectiveConvId = convId!;
+        let failedUploads = 0;
+
         // Register all files in panel and send messages
         for (const file of files) {
           const msgId = genId();
@@ -533,7 +536,7 @@ export default function ChatPage() {
             registerFile(file, msgId);
           }
 
-          addMessage(convId, {
+          addMessage(effectiveConvId, {
             id: msgId, role: "user",
             content: content || `Analyze this contract: ${file.name}`,
             timestamp: new Date(),
@@ -541,20 +544,51 @@ export default function ChatPage() {
           });
 
           try {
-            await chatApi.upload(file, convId);
+            await chatApi.upload(file, effectiveConvId);
           } catch (err) {
-            console.warn(`File upload failed for ${file.name}:`, err);
+            const message = err instanceof Error ? err.message : String(err);
+            const isMissingConversation =
+              message.includes("Conversation not found") || message.includes("404");
+
+            if (isMissingConversation) {
+              try {
+                const api = await conversationsApi.create({ title });
+                const conv = apiConvToLocal(api);
+                setConversations((prev) => [conv, ...prev]);
+                setActiveConversationId(conv.id);
+                effectiveConvId = conv.id;
+
+                // Retry once with a fresh conversation id.
+                await chatApi.upload(file, effectiveConvId);
+              } catch (retryErr) {
+                failedUploads += 1;
+                console.warn(`File upload retry failed for ${file.name}:`, retryErr);
+              }
+            } else {
+              failedUploads += 1;
+              console.warn(`File upload failed for ${file.name}:`, err);
+            }
           }
+        }
+
+        if (failedUploads >= files.length) {
+          addMessage(effectiveConvId, {
+            id: genId(),
+            role: "assistant",
+            content: "⚠️ Upload failed. The target conversation may have been deleted or expired. Please try again.",
+            timestamp: new Date(),
+          });
+          return;
         }
 
         // Trigger analysis for the batch
         setIsStreaming(true);
-        addMessage(convId!, {
+        addMessage(effectiveConvId, {
           id: genId(), role: "assistant",
           content: `I've received **${files.length}** document(s). Starting multi-step legal audit...`,
           timestamp: new Date(),
         });
-        runAnalysis(convId!, "vendor_agreement", firstFile!.name);
+        runAnalysis(effectiveConvId, "vendor_agreement", firstFile!.name);
         return;
       }
 
